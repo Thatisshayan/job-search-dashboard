@@ -114,6 +114,20 @@ export async function sendApprovalCard(input: {
   });
 }
 
+export function finalBrowserReviewText(input: { title: string; employer: string }) {
+  return `Telegram approval recorded for ${input.title} at ${input.employer}. Open the original application, review only verified résumé-backed details, and provide final confirmation on that specific employer form before it is submitted.`;
+}
+
+export async function sendFinalBrowserReviewCard(input: { chatId: string; title: string; employer: string; originalApplyUrl: string }) {
+  return telegramApi<{ message_id: number }>("sendMessage", {
+    chat_id: input.chatId,
+    text: finalBrowserReviewText(input),
+    reply_markup: {
+      inline_keyboard: [[{ text: "Open original application", url: input.originalApplyUrl }]],
+    },
+  });
+}
+
 export async function answerTelegramCallback(callbackQueryId: string, text: string) {
   return telegramApi<boolean>("answerCallbackQuery", { callback_query_id: callbackQueryId, text, show_alert: false });
 }

@@ -1,6 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { processTelegramApprovalCallback } from "./applicationService";
-import { answerTelegramCallback, isValidTelegramWebhookSecret, markApprovalCardResolved } from "./telegram";
+import { answerTelegramCallback, isValidTelegramWebhookSecret, markApprovalCardResolved, sendFinalBrowserReviewCard } from "./telegram";
 
 export function registerTelegramWebhook(app: Express) {
   app.post("/api/telegram/webhook", async (req: Request, res: Response) => {
@@ -22,6 +22,18 @@ export function registerTelegramWebhook(app: Express) {
       await answerTelegramCallback(String(callback.id), outcome.text);
       if (outcome.state !== "ignored" && outcome.telegramMessageId) {
         await markApprovalCardResolved(String(callback.message.chat.id), outcome.telegramMessageId, outcome.text);
+      }
+      if (outcome.state === "ready_for_final_confirmation" && outcome.originalApplyUrl) {
+        try {
+          await sendFinalBrowserReviewCard({
+            chatId: String(callback.message.chat.id),
+            title: outcome.jobTitle,
+            employer: outcome.employer,
+            originalApplyUrl: outcome.originalApplyUrl,
+          });
+        } catch (error) {
+          console.error("Telegram browser-review follow-up could not be delivered", error);
+        }
       }
       res.status(200).json({ ok: true });
     } catch {

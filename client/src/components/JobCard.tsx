@@ -63,6 +63,7 @@ export default function JobCard({ item }: { item: JobCardItem }) {
           <div>
             <div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /><h3 className="font-semibold">Why this was selected</h3></div>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">{item.scorecard.rationale}</p>
+            {applicationStatus === "ready_for_final_confirmation" && <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm leading-5 text-primary"><strong>Telegram approved.</strong> Open the original application to review résumé-backed details. Final confirmation is still required on that specific employer form before submission.</div>}
             {gaps.length > 0 && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3"><div className="flex items-start gap-2"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" /><div><p className="text-xs font-bold uppercase tracking-wider text-amber-900">Notable gaps</p><ul className="mt-1 space-y-1 text-sm leading-5 text-amber-900">{gaps.map(gap => <li key={gap}>• {gap}</li>)}</ul></div></div></div>}
             <div className="mt-5 flex flex-wrap gap-2">
               <Button variant={status === "saved" ? "secondary" : "outline"} size="sm" onClick={() => action.mutate({ jobId: item.job.id, status: status === "saved" ? "none" : "saved" })}><Bookmark className="mr-2 h-3.5 w-3.5" />{status === "saved" ? "Saved" : "Save"}</Button>

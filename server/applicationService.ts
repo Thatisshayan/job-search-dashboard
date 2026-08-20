@@ -164,6 +164,8 @@ export async function processTelegramApprovalCallback(input: { callbackId: strin
   if (!db) throw new Error("Database unavailable");
   const application = (await db.select().from(applications).where(eq(applications.id, callback.applicationId)).limit(1))[0];
   if (!application || application.status !== "awaiting_telegram_approval") return { state: "ignored" as const, text: "This application review was already handled." };
+  const job = (await db.select().from(jobs).where(eq(jobs.id, application.jobId)).limit(1))[0];
+  if (!job) return { state: "ignored" as const, text: "The related job record is unavailable." };
   const targetStatus = resolveSingleUseApproval({
     currentStatus: application.status,
     storedNonceHash: application.approvalNonceHash,
@@ -183,5 +185,13 @@ export async function processTelegramApprovalCallback(input: { callbackId: strin
   }).where(and(eq(applications.id, application.id), eq(applications.status, "awaiting_telegram_approval"), eq(applications.approvalNonceHash, hashApprovalNonce(callback.nonce))));
   const header = (Array.isArray(updateResult) ? updateResult[0] : updateResult) as { affectedRows?: number };
   if (header.affectedRows !== 1) return { state: "ignored" as const, text: "This application review was already handled." };
-  return { state: targetStatus, applicationId: application.id, telegramMessageId: application.telegramMessageId, text: targetStatus === "declined" ? "Application review declined." : "Approved for final browser confirmation. No employer application was submitted." };
+  return {
+    state: targetStatus,
+    applicationId: application.id,
+    telegramMessageId: application.telegramMessageId,
+    originalApplyUrl: targetStatus === "ready_for_final_confirmation" ? job.originalApplyUrl : null,
+    jobTitle: job.title,
+    employer: job.employer,
+    text: targetStatus === "declined" ? "Application review declined." : "Approved for final browser confirmation. No employer application was submitted.",
+  };
 }

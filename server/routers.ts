@@ -19,6 +19,7 @@ import { TRPCError } from "@trpc/server";
 import { ENV } from "./_core/env";
 import { prepareApplicationForTelegram } from "./applicationService";
 import { importVerifiedListingBatch } from "./verifiedListingImport";
+import { isWorkspaceOwner } from "./ownerAccess";
 
 const settingInput = z.object({
   targetTitles: z.array(z.string().trim().min(2)).min(1).max(20),
@@ -62,7 +63,7 @@ function getLocalDateKey(timeZone: string) {
 }
 
 const ownerProcedure = protectedProcedure.use(({ ctx, next }) => {
-  if (ctx.user.openId !== ENV.ownerOpenId) {
+  if (!isWorkspaceOwner(ctx.user, ENV.ownerOpenId)) {
     throw new TRPCError({ code: "FORBIDDEN", message: "This private dashboard is restricted to its owner." });
   }
   return next({ ctx });
@@ -78,7 +79,7 @@ export const appRouter = router({
     }),
   }),
   dashboard: router({
-    accessStatus: protectedProcedure.query(({ ctx }) => ({ isOwner: ctx.user.openId === ENV.ownerOpenId })),
+    accessStatus: protectedProcedure.query(({ ctx }) => ({ isOwner: isWorkspaceOwner(ctx.user, ENV.ownerOpenId) })),
     overview: ownerProcedure.query(({ ctx }) => getDashboardOverview(ctx.user.id)),
     shortlist: ownerProcedure.input(z.object({ dateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() })).query(({ ctx, input }) =>
       listShortlist(ctx.user.id, input.dateKey ?? getLocalDateKey("America/Toronto")),

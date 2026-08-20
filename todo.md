@@ -52,3 +52,5 @@
 - [x] Implement an owner-only verified-listing import and scoring path that records source provenance, run health, deduplication, and a publishable daily shortlist without auto-submission.
 - [x] Treat current construction-manager and construction-site-manager postings as direct adjacent target roles within the transparent scoring model.
 - [x] Treat Canadian co-ordinator spelling variants as direct project- and construction-coordinator target roles in the transparent scoring model.
+- [ ] Extend each Telegram-approved application into a browser-ready, resume-backed preparation flow while requiring final confirmation immediately before the specific employer form is submitted.
+- [ ] Fix the deployed owner account’s access to the private dashboard without allowing non-owner accounts into the workspace.

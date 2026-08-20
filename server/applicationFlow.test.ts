@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createApprovalCallback, hashApprovalNonce, resolveSingleUseApproval, verifyApprovalCallback } from "./telegram";
+import { createApprovalCallback, finalBrowserReviewText, hashApprovalNonce, resolveSingleUseApproval, verifyApprovalCallback } from "./telegram";
 
 describe("Telegram application approval tokens", () => {
   it("accepts an intact signed callback and rejects altered callback data", () => {
@@ -32,5 +32,12 @@ describe("Telegram application approval tokens", () => {
       decision: "approve",
     });
     expect(replay).toBeNull();
+  });
+
+  it("states the final browser-confirmation boundary in the approved follow-up", () => {
+    const message = finalBrowserReviewText({ title: "Construction Project Manager", employer: "Example Builder" });
+    expect(message).toContain("Open the original application");
+    expect(message).toContain("final confirmation");
+    expect(message).not.toContain("automatically submit");
   });
 });

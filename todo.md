@@ -47,3 +47,8 @@
 - [ ] Add unit tests for scoring, penalties, deduplication, rationale evidence, authenticated procedures, and schedule idempotency.
 - [ ] Verify desktop and mobile UI states, test navigation and external apply-link behavior, and capture visual review screenshots.
 - [ ] Save a release checkpoint after all tasks are complete and documented.
+- [ ] Complete authorized live-source access, then collect and publish the first real full-time Toronto/GTA construction shortlist with original employer or ATS links.
+- [ ] Establish the daily live-refresh and owner-summary workflow only after source collection is executable and production-safe.
+- [x] Implement an owner-only verified-listing import and scoring path that records source provenance, run health, deduplication, and a publishable daily shortlist without auto-submission.
+- [x] Treat current construction-manager and construction-site-manager postings as direct adjacent target roles within the transparent scoring model.
+- [x] Treat Canadian co-ordinator spelling variants as direct project- and construction-coordinator target roles in the transparent scoring model.

@@ -25,3 +25,12 @@ The dashboard must discover the actual connected LinkedIn and Indeed tool slugs 
 The supplied MCP resource advertises `https://login.composio.dev` as its authorization server and supports Bearer authentication in the request header. The endpoint rejected Composio project API keys because it expects an AuthKit OAuth JWT associated with the MCP resource, so the connector must be configured through its OAuth authorization flow rather than with a static project-key header. [6]
 
 [6]: https://connect.composio.dev/.well-known/oauth-protected-resource
+
+## 2026-08-20 live-source retry
+
+| Source | Observed result | Current status |
+|---|---|---|
+| Composio OAuth MCP | Authenticated successfully. Its tool catalog exposed Dice and ZipRecruiter job-search actions, but no usable LinkedIn or Indeed job-search action. | **Authenticated; limited capability.** |
+| ZipRecruiter MCP | A read-only batch of GTA full-time construction queries returned provider `429` and connection-closed failures. | **Degraded.** Do not repeat the identical query batch. |
+| Dice MCP | A validated Toronto, 75 km, full-time construction-project-manager query completed but returned zero listings for the prior seven-day window. | **Executable; no current matching data.** |
+| Government of Canada Job Bank | The public Toronto construction-manager market report displayed 29 listings. It exposed a current Webuild - Civil Works Inc. **construction senior project manager** posting dated 2026-08-14 at `https://www.jobbank.gc.ca/jobsearch/jobposting/50076711`. | **Research fallback only.** Individual postings must be reviewed before a user-clickable shortlist link is published. |

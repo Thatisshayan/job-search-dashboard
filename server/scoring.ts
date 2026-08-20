@@ -38,10 +38,14 @@ export type ScoreResult = {
 
 const exactTitles = [
   "construction coordinator",
+  "construction co-ordinator",
   "project coordinator",
+  "project co-ordinator",
   "estimator",
   "project manager",
   "construction project manager",
+  "construction manager",
+  "construction site manager",
   "site superintendent",
   "preconstruction coordinator",
   "preconstruction manager",

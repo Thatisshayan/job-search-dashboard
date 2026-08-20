@@ -18,6 +18,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { TRPCError } from "@trpc/server";
 import { ENV } from "./_core/env";
 import { prepareApplicationForTelegram } from "./applicationService";
+import { importVerifiedListingBatch } from "./verifiedListingImport";
 
 const settingInput = z.object({
   targetTitles: z.array(z.string().trim().min(2)).min(1).max(20),
@@ -28,6 +29,23 @@ const settingInput = z.object({
   shortlistLimit: z.number().int().min(1).max(20),
   scheduledTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   dailyNotificationEnabled: z.boolean(),
+});
+
+const verifiedListingInput = z.object({
+  sourceName: z.string().trim().min(2).max(120),
+  sourceExternalId: z.string().trim().min(1).max(255).optional(),
+  sourcePostingUrl: z.string().url(),
+  originalApplyUrl: z.string().url(),
+  title: z.string().trim().min(2).max(255),
+  employer: z.string().trim().min(2).max(255),
+  location: z.string().trim().min(2).max(255),
+  locationKm: z.number().int().min(0).max(250).optional(),
+  employmentType: z.literal("full-time"),
+  description: z.string().trim().min(80),
+  postedAt: z.coerce.date(),
+  expiresAt: z.coerce.date().optional(),
+  seniorityMatch: z.enum(["strong", "partial", "weak"]),
+  verificationNote: z.string().trim().min(20).max(1000),
 });
 
 function getLocalDateKey(timeZone: string) {
@@ -83,6 +101,9 @@ export const appRouter = router({
         const application = await prepareApplicationForTelegram(ctx.user.id, input.jobId);
         return { application };
       }),
+    importVerifiedListings: ownerProcedure
+      .input(z.object({ listings: z.array(verifiedListingInput).min(1).max(20) }))
+      .mutation(({ ctx, input }) => importVerifiedListingBatch(ctx.user.id, input.listings)),
     previewScore: ownerProcedure
       .input(z.object({
         title: z.string(), description: z.string(), employmentType: z.string().optional(), location: z.string().optional(), locationKm: z.number().int().optional(), originalApplyUrl: z.string().url().optional(), postedAt: z.date().optional(), status: z.enum(["active", "expired", "unavailable", "stale"]).optional(), skillMatches: z.array(z.string()).optional(), seniorityMatch: z.enum(["strong", "partial", "weak"]).optional(), isDuplicate: z.boolean().optional(),

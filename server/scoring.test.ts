@@ -40,4 +40,33 @@ describe("scoreJob", () => {
     expect(result.totalScore).toBe(0);
     expect(result.notableGaps).toHaveLength(5);
   });
+
+  it("treats construction-manager titles as a direct adjacent role family", () => {
+    const result = scoreJob({
+      title: "Construction Manager",
+      description: "A full-time GTA construction-management role with schedules, subcontractors, budgets, contracts, and quality control.",
+      employmentType: "Full-time",
+      location: "Markham, Ontario",
+      originalApplyUrl: "https://employer.example/apply",
+      postedAt: new Date(),
+      skillMatches: ["subcontractor management"],
+      seniorityMatch: "partial",
+    });
+
+    expect(result.roleAlignment).toBe(SCORE_WEIGHTS.roleAlignment);
+  });
+
+  it("accepts Canadian coordinator spelling variants as direct target roles", () => {
+    const result = scoreJob({
+      title: "Project Co-ordinator, Construction",
+      description: "A full-time GTA construction coordination role.",
+      employmentType: "Full-time",
+      location: "Concord, Ontario",
+      originalApplyUrl: "https://employer.example/apply",
+      postedAt: new Date(),
+      seniorityMatch: "partial",
+    });
+
+    expect(result.roleAlignment).toBe(SCORE_WEIGHTS.roleAlignment);
+  });
 });

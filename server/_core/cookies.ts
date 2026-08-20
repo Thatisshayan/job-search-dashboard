@@ -24,6 +24,8 @@ function isSecureRequest(req: Request) {
 export function getSessionCookieOptions(
   req: Request
 ): Pick<CookieOptions, "domain" | "httpOnly" | "path" | "sameSite" | "secure"> {
+  const hostname = req.hostname ?? "";
+  const isLocalDevelopmentHost = LOCAL_HOSTS.has(hostname) || isIpAddress(hostname);
   // const hostname = req.hostname;
   // const shouldSetDomain =
   //   hostname &&
@@ -43,6 +45,9 @@ export function getSessionCookieOptions(
     httpOnly: true,
     path: "/",
     sameSite: "none",
-    secure: isSecureRequest(req),
+    // Hosted requests arrive through a TLS-terminating proxy that may not retain
+    // x-forwarded-proto. SameSite=None cookies are rejected by browsers unless
+    // Secure is set, so default to Secure for every non-local deployment host.
+    secure: !isLocalDevelopmentHost || isSecureRequest(req),
   };
 }

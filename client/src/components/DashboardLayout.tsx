@@ -1,12 +1,4 @@
-import { useAuth } from "@/_core/hooks/useAuth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Sidebar,
   SidebarContent,
@@ -20,10 +12,8 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { trpc } from "@/lib/trpc";
-import { BriefcaseBusiness, FileUser, History, LogOut, PanelLeft, SearchCheck, Settings2 } from "lucide-react";
+import { FileUser, History, PanelLeft, SearchCheck, Settings2 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
@@ -42,37 +32,8 @@ const MAX_WIDTH = 400;
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [sidebarWidth, setSidebarWidth] = useState(() => Number(localStorage.getItem(SIDEBAR_WIDTH_KEY)) || DEFAULT_WIDTH);
-  const { loading, user, logout } = useAuth();
-  const access = trpc.dashboard.accessStatus.useQuery(undefined, { enabled: !loading && Boolean(user) });
 
   useEffect(() => localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth)), [sidebarWidth]);
-
-  if (loading) return <DashboardLayoutSkeleton />;
-  if (!user) {
-    return (
-      <div className="paper-grid flex min-h-dvh items-center justify-center p-6">
-        <div className="w-full max-w-md rounded-3xl border bg-card p-8 text-center shadow-[0_24px_80px_rgba(17,52,65,0.12)]">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground"><BriefcaseBusiness className="h-7 w-7" /></div>
-          <h1 className="mt-6 text-2xl font-bold tracking-tight">Your private job workspace</h1>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">Sign in to view your construction job shortlist, search preferences, and resume-backed score evidence.</p>
-          <Button onClick={startLogin} size="lg" className="mt-7 w-full">Sign in to continue</Button>
-        </div>
-      </div>
-    );
-  }
-  if (access.isLoading) return <DashboardLayoutSkeleton />;
-  if (!access.data?.isOwner) {
-    return (
-      <div className="paper-grid flex min-h-dvh items-center justify-center p-6">
-        <div className="w-full max-w-md rounded-3xl border bg-card p-8 text-center shadow-[0_24px_80px_rgba(17,52,65,0.12)]">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive text-destructive-foreground"><BriefcaseBusiness className="h-7 w-7" /></div>
-          <h1 className="mt-6 text-2xl font-bold tracking-tight">Owner access only</h1>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">This job-hunting workspace contains private resume evidence and is restricted to its owner.</p>
-          <Button onClick={logout} variant="outline" className="mt-7">Sign out</Button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <SidebarProvider style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}>
@@ -82,7 +43,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 }
 
 function DashboardLayoutContent({ children, setSidebarWidth }: { children: React.ReactNode; setSidebarWidth: (width: number) => void }) {
-  const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
   const { state, toggleSidebar } = useSidebar();
   const [isResizing, setIsResizing] = useState(false);
@@ -136,15 +96,10 @@ function DashboardLayoutContent({ children, setSidebarWidth }: { children: React
             </SidebarMenu>
           </SidebarContent>
           <SidebarFooter className="p-3">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="flex w-full items-center gap-3 rounded-xl p-2 text-left transition-colors hover:bg-sidebar-accent focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:justify-center">
-                  <Avatar className="h-9 w-9 shrink-0 border border-sidebar-border"><AvatarFallback className="bg-sidebar-primary text-xs font-bold text-sidebar-primary-foreground">{user?.name?.slice(0, 2).toUpperCase() || "SS"}</AvatarFallback></Avatar>
-                  <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden"><p className="truncate text-sm font-semibold text-sidebar-foreground">{user?.name || "Shayan Salimi"}</p><p className="mt-0.5 truncate text-xs text-sidebar-foreground/55">Private workspace</p></div>
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52"><DropdownMenuItem onClick={logout} className="cursor-pointer text-destructive focus:text-destructive"><LogOut className="mr-2 h-4 w-4" />Sign out</DropdownMenuItem></DropdownMenuContent>
-            </DropdownMenu>
+            <div className="flex w-full items-center gap-3 rounded-xl p-2 group-data-[collapsible=icon]:justify-center">
+              <Avatar className="h-9 w-9 shrink-0 border border-sidebar-border"><AvatarFallback className="bg-sidebar-primary text-xs font-bold text-sidebar-primary-foreground">SS</AvatarFallback></Avatar>
+              <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden"><p className="truncate text-sm font-semibold text-sidebar-foreground">Shayan Salimi</p><p className="mt-0.5 truncate text-xs text-sidebar-foreground/55">Public dashboard</p></div>
+            </div>
           </SidebarFooter>
         </Sidebar>
         {!isCollapsed && <div className="absolute right-0 top-0 z-50 h-full w-1 cursor-col-resize transition-colors hover:bg-sidebar-primary/50" onMouseDown={() => setIsResizing(true)} />}

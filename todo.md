@@ -55,3 +55,4 @@
 - [ ] Extend each Telegram-approved application into a browser-ready, resume-backed preparation flow while requiring final confirmation immediately before the specific employer form is submitted.
 - [ ] Fix the deployed owner account’s access to the private dashboard without allowing non-owner accounts into the workspace.
 - [ ] Trace and fix the remaining deployed OAuth callback or session-identity failure after the initial owner-role repair did not restore access.
+- [ ] Remove sign-in and owner-only restrictions so the confirmed public dashboard link opens directly while preserving Telegram per-application approval safeguards.

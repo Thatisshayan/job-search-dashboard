@@ -49,6 +49,12 @@ export async function getUserByOpenId(openId: string) {
   return result[0];
 }
 
+export async function getPublicWorkspaceUserId() {
+  const owner = await getUserByOpenId(ENV.ownerOpenId);
+  if (!owner) throw new Error("The public workspace owner is not configured");
+  return owner.id;
+}
+
 const defaultTitles = [
   "Construction Project Manager",
   "Project Coordinator Construction",

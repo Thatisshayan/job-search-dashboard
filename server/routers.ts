@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   getDashboardOverview,
+  getPublicWorkspaceUserId,
   getProfile,
   getSettings,
   listJobHistory,
@@ -80,14 +81,14 @@ export const appRouter = router({
   }),
   dashboard: router({
     accessStatus: protectedProcedure.query(({ ctx }) => ({ isOwner: isWorkspaceOwner(ctx.user, ENV.ownerOpenId) })),
-    overview: ownerProcedure.query(({ ctx }) => getDashboardOverview(ctx.user.id)),
-    shortlist: ownerProcedure.input(z.object({ dateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() })).query(({ ctx, input }) =>
-      listShortlist(ctx.user.id, input.dateKey ?? getLocalDateKey("America/Toronto")),
+    overview: publicProcedure.query(async () => getDashboardOverview(await getPublicWorkspaceUserId())),
+    shortlist: publicProcedure.input(z.object({ dateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() })).query(async ({ input }) =>
+      listShortlist(await getPublicWorkspaceUserId(), input.dateKey ?? getLocalDateKey("America/Toronto")),
     ),
-    history: ownerProcedure.query(({ ctx }) => listJobHistory(ctx.user.id)),
-    runs: ownerProcedure.query(({ ctx }) => listRuns(ctx.user.id)),
-    profile: ownerProcedure.query(({ ctx }) => getProfile(ctx.user.id)),
-    settings: ownerProcedure.query(({ ctx }) => getSettings(ctx.user.id)),
+    history: publicProcedure.query(async () => listJobHistory(await getPublicWorkspaceUserId())),
+    runs: publicProcedure.query(async () => listRuns(await getPublicWorkspaceUserId())),
+    profile: publicProcedure.query(async () => getProfile(await getPublicWorkspaceUserId())),
+    settings: publicProcedure.query(async () => getSettings(await getPublicWorkspaceUserId())),
     updateSettings: ownerProcedure.input(settingInput).mutation(({ ctx, input }) => updateSettings(ctx.user.id, input)),
     setSourceEnabled: ownerProcedure.input(z.object({ sourceId: z.number().int().positive(), enabled: z.boolean() })).mutation(({ ctx, input }) => updateSourceEnabled(ctx.user.id, input.sourceId, input.enabled)),
     setAction: ownerProcedure

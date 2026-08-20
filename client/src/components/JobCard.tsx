@@ -3,8 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { trpc } from "@/lib/trpc";
-import { Bookmark, CheckCircle2, CircleAlert, ExternalLink, MapPin, MoreHorizontal, Send, Sparkles } from "lucide-react";
+import { CircleAlert, ExternalLink, MapPin, Sparkles } from "lucide-react";
 
 type JobCardItem = {
   entry: { rank: number; score: number; isNew: boolean };
@@ -32,14 +31,9 @@ function postedLabel(value: Date | string | null) {
 }
 
 export default function JobCard({ item }: { item: JobCardItem }) {
-  const utils = trpc.useUtils();
-  const action = trpc.dashboard.setAction.useMutation({ onSuccess: () => utils.dashboard.shortlist.invalidate() });
-  const prepareApplication = trpc.dashboard.prepareApplication.useMutation({ onSuccess: () => utils.dashboard.shortlist.invalidate() });
   const score = item.scorecard.totalScore;
   const gaps = Array.isArray(item.scorecard.notableGaps) ? item.scorecard.notableGaps.filter((gap): gap is string => typeof gap === "string") : [];
-  const status = item.action?.status ?? "none";
   const canApply = Boolean(item.job.originalApplyUrl && item.job.status === "active");
-  const applicationStatus = item.application?.status;
 
   return (
     <Card className="overflow-hidden border-border/90 bg-card shadow-[0_8px_30px_rgba(18,57,69,0.06)] transition-shadow hover:shadow-[0_14px_38px_rgba(18,57,69,0.11)]">
@@ -63,14 +57,8 @@ export default function JobCard({ item }: { item: JobCardItem }) {
           <div>
             <div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /><h3 className="font-semibold">Why this was selected</h3></div>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">{item.scorecard.rationale}</p>
-            {applicationStatus === "ready_for_final_confirmation" && <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm leading-5 text-primary"><strong>Telegram approved.</strong> Open the original application to review résumé-backed details. Final confirmation is still required on that specific employer form before submission.</div>}
             {gaps.length > 0 && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3"><div className="flex items-start gap-2"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" /><div><p className="text-xs font-bold uppercase tracking-wider text-amber-900">Notable gaps</p><ul className="mt-1 space-y-1 text-sm leading-5 text-amber-900">{gaps.map(gap => <li key={gap}>• {gap}</li>)}</ul></div></div></div>}
-            <div className="mt-5 flex flex-wrap gap-2">
-              <Button variant={status === "saved" ? "secondary" : "outline"} size="sm" onClick={() => action.mutate({ jobId: item.job.id, status: status === "saved" ? "none" : "saved" })}><Bookmark className="mr-2 h-3.5 w-3.5" />{status === "saved" ? "Saved" : "Save"}</Button>
-              <Button variant={status === "applied" ? "secondary" : "outline"} size="sm" onClick={() => action.mutate({ jobId: item.job.id, status: "applied" })}><CheckCircle2 className="mr-2 h-3.5 w-3.5" />{status === "applied" ? "Applied" : "Mark applied"}</Button>
-              <Button variant="ghost" size="sm" onClick={() => action.mutate({ jobId: item.job.id, status: "not_interested" })}><MoreHorizontal className="mr-2 h-3.5 w-3.5" />Not interested</Button>
-              <Button variant="outline" size="sm" disabled={!canApply || prepareApplication.isPending || applicationStatus === "awaiting_telegram_approval" || applicationStatus === "ready_for_final_confirmation"} onClick={() => prepareApplication.mutate({ jobId: item.job.id })}><Send className="mr-2 h-3.5 w-3.5" />{applicationStatus === "awaiting_telegram_approval" ? "Awaiting Telegram approval" : applicationStatus === "ready_for_final_confirmation" ? "Ready for final confirmation" : "Prepare for Telegram approval"}</Button>
-            </div>
+            <p className="mt-5 text-xs leading-5 text-muted-foreground">Application tracking and Telegram approval controls are not shown in this public view.</p>
           </div>
 
           <aside className="rounded-2xl border bg-muted/35 p-4">
@@ -82,7 +70,7 @@ export default function JobCard({ item }: { item: JobCardItem }) {
               })}
               {item.scorecard.penalties !== 0 && <p className="border-t pt-3 text-xs font-semibold text-destructive">Penalties: {item.scorecard.penalties} points</p>}
             </div>
-            {canApply ? <Button asChild className="mt-5 w-full bg-amber-400 text-amber-950 hover:bg-amber-300"><a href={item.job.originalApplyUrl!} target="_blank" rel="noopener noreferrer" onClick={() => action.mutate({ jobId: item.job.id, status: "opened" })}>Apply on original site<ExternalLink className="ml-2 h-4 w-4" /></a></Button> : <Tooltip><TooltipTrigger asChild><span tabIndex={0}><Button disabled className="mt-5 w-full">Apply on original site</Button></span></TooltipTrigger><TooltipContent>No verified original application link is available for this listing.</TooltipContent></Tooltip>}
+            {canApply ? <Button asChild className="mt-5 w-full bg-amber-400 text-amber-950 hover:bg-amber-300"><a href={item.job.originalApplyUrl!} target="_blank" rel="noopener noreferrer">Apply on original site<ExternalLink className="ml-2 h-4 w-4" /></a></Button> : <Tooltip><TooltipTrigger asChild><span tabIndex={0}><Button disabled className="mt-5 w-full">Apply on original site</Button></span></TooltipTrigger><TooltipContent>No verified original application link is available for this listing.</TooltipContent></Tooltip>}
           </aside>
         </div>
       </CardContent>

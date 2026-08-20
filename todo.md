@@ -1,0 +1,49 @@
+# Project TODO
+
+- [x] Implement owner-authenticated access and wrap all dashboard routes in the existing dashboard layout.
+- [x] Create persistent database models for candidate profiles, search settings, normalized jobs, daily shortlist entries, scorecards, job actions, source configurations, and job-run logs.
+- [x] Add the verified Shayan Salimi candidate profile with resume-grounded experience, skills, education, and the selected ATS résumé metadata.
+- [x] Build the Today’s Shortlist page with responsive job cards, 0–100 fit scores, category breakdowns, rationale, gaps, source attribution, and an external original-site application action.
+- [x] Ensure every application action is labeled exactly “Apply on original site” and opens its destination in a new tab with safe external-link attributes.
+- [x] Build Job History with date navigation, applied/saved/not-interested tracking, and duplicate-safe historical shortlist visibility.
+- [x] Build Search Settings for role titles, 75 km GTA radius, full-time filter, minimum score, shortlist limit, daily 7:30 AM America/Toronto schedule, and source enablement.
+- [x] Build Resume Profile showing “Shayan Salimi — Construction Project Manager,” verified skills, experience evidence, education, and scoring guardrails.
+- [x] Build a Run History page with per-run source checks, collected listings, duplicates merged, scored jobs, shortlist count, completion state, and last-successful-refresh timestamp.
+- [x] Implement deterministic six-component scoring with exact 30/25/15/10/10/10 weights and penalties for missing links, part-time status, non-GTA location, expired listings, and duplicate records.
+- [x] Enforce owner-only access in the dashboard routes and protected server procedures.
+- [x] Add date navigation to Job History for browsing daily shortlists.
+- [x] Add explicit full-time and source enable/disable controls to Search Settings and persist them.
+- [x] Show source-check counts and the last successful refresh timestamp in Run History.
+- [ ] Inspect the workspace Composio configuration and available LinkedIn and Indeed search actions before wiring the authorized source integration.
+- [ ] Replace the Adzuna credential dependency with a Composio-based LinkedIn and Indeed source adapter if those authorized connections and actions are available.
+- [ ] Store the supplied Composio key securely, validate it server-side, and document the available job-search action schemas before enabling live collection.
+- [ ] Replace the discovery-only Composio key with an owner-provided key that has Tool Execution write permission, then revalidate the live job-search action.
+- [ ] Verify the updated Composio key’s Tool Execution write scope before collecting the first live Toronto/GTA construction-job dataset.
+- [ ] Resolve the confirmed Composio Tool Execution write-permission error before enabling live daily collection.
+- [ ] Replace or repair the Composio job-search source after the provider returned an upstream MCP connection-closed error during a permitted execution call.
+- [ ] Validate the newly supplied Composio replacement key for catalog access and permitted job-search execution before changing the live source status.
+- [ ] Inspect and add the user-supplied Composio MCP endpoint through the approved connector flow, then verify its available job-search tools and authenticated connections.
+- [ ] Validate the newly supplied Composio key against the approved MCP connection and the documented job-search capability before enabling a live ingestion run.
+- [ ] Replace the API-key header approach for the Composio MCP with its required OAuth/AuthKit connection flow after the endpoint rejected the header as an invalid AuthKit JWT.
+- [x] Package the completed job-hunting dashboard workflow, source-validation safeguards, and Composio OAuth MCP guidance as a reusable downloadable Manus skill.
+- [x] Generalize the reusable skill so any user can supply a resume, desired roles, location, and preferences rather than limiting the workflow to construction.
+- [x] Extend the reusable job-search skill with application preparation and tracking that requires explicit user confirmation before every external submission.
+- [x] Add a Telegram per-application approval pattern with owner verification, signed callback handling, idempotent decisions, and no batch or blanket submission authorization.
+- [x] Document the selected Telegram approval path in the reusable skill, including HTTPS webhook verification, owner chat allowlisting, one-time callback tokens, and mandatory final browser confirmation.
+- [x] Verify the Telegram bot token and paired owner chat, then send one non-actionable test approval card without initiating any application.
+- [x] Validate the newly supplied Telegram token with a lightweight bot identity check, discover the `/start` owner chat, and enforce single-chat pairing before test delivery.
+- [x] Retrieve the user’s newly started Telegram chat, bind it as the test-only owner destination, and send the requested approval card.
+- [x] Connect the candidate profile, selected scored jobs, application records, and Telegram approval cards through a secure owner-only workflow.
+- [x] Add authenticated Telegram webhook handling with secret-header verification, allowlisted owner chat checks, signed single-use approval tokens, and idempotent state transitions.
+- [x] Harden Telegram approval updates against duplicate or racing callbacks and test that only the first valid decision changes the application state.
+- [x] Add a persisted callback-replay integration test proving that only the first real approval callback can mutate an application record.
+- [x] Verify that the user-approved Telegram test callback moved the non-actionable application to browser-ready status exactly once without any external submission.
+- [x] Run a safe end-to-end test from a resume-backed selected job through Telegram approval to browser-ready state without external application submission.
+- [ ] Implement evidence-based rationale and notable-gap generation without inferring unverified credentials or eligibility.
+- [ ] Implement authorized-source ingestion contracts, conservative deduplication, original-link preference, and source health/error reporting without unauthorized job-board scraping.
+- [ ] Add LLM-assisted description analysis behind a server-side integration with structured outputs and explainable score evidence.
+- [ ] Add idempotent daily scheduled refresh at 7:30 AM Toronto time and persist execution logs safely.
+- [ ] Add owner-only daily email notification with new top matches and direct original-site application links.
+- [ ] Add unit tests for scoring, penalties, deduplication, rationale evidence, authenticated procedures, and schedule idempotency.
+- [ ] Verify desktop and mobile UI states, test navigation and external apply-link behavior, and capture visual review screenshots.
+- [ ] Save a release checkpoint after all tasks are complete and documented.

@@ -16,6 +16,8 @@ import {
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
+let publicWorkspaceBootstrap: Promise<number> | null = null;
+const PUBLIC_WORKSPACE_OPEN_ID = "public-workspace-shayan-salimi";
 
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
@@ -64,7 +66,42 @@ export async function getPublicWorkspaceUserId() {
 
   const onlyWorkspaceUser = (await db.select().from(users).limit(1))[0];
   if (onlyWorkspaceUser) return onlyWorkspaceUser.id;
-  throw new Error("The public workspace owner is not configured");
+
+  await db.insert(users).values({
+    openId: PUBLIC_WORKSPACE_OPEN_ID,
+    name: "Shayan Salimi",
+    email: "shayansalimi@outlook.com",
+    loginMethod: "public-workspace",
+    role: "admin",
+    lastSignedIn: new Date(),
+  });
+  const createdOwner = await getUserByOpenId(PUBLIC_WORKSPACE_OPEN_ID);
+  if (!createdOwner) throw new Error("The public workspace owner could not be created");
+  return createdOwner.id;
+}
+
+export async function ensurePublicWorkspaceInitialized() {
+  if (!publicWorkspaceBootstrap) {
+    publicWorkspaceBootstrap = (async () => {
+      const userId = await getPublicWorkspaceUserId();
+      await ensureDashboardSetup(userId);
+      const db = await getDb();
+      if (!db) throw new Error("The public workspace database is unavailable");
+      const activeJob = (await db.select({ id: jobs.id }).from(jobs).where(eq(jobs.status, "active")).limit(1))[0];
+      if (!activeJob) {
+        const [{ importVerifiedListingBatch }, { PUBLIC_VERIFIED_LISTINGS }] = await Promise.all([
+          import("./verifiedListingImport"),
+          import("./publicVerifiedListings"),
+        ]);
+        await importVerifiedListingBatch(userId, PUBLIC_VERIFIED_LISTINGS);
+      }
+      return userId;
+    })().catch(error => {
+      publicWorkspaceBootstrap = null;
+      throw error;
+    });
+  }
+  return publicWorkspaceBootstrap;
 }
 
 const defaultTitles = [

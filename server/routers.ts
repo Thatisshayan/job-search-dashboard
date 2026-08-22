@@ -1,7 +1,7 @@
 import { z } from "zod";
 import {
   getDashboardOverview,
-  getPublicWorkspaceUserId,
+  ensurePublicWorkspaceInitialized,
   getProfile,
   getSettings,
   listJobHistory,
@@ -81,14 +81,14 @@ export const appRouter = router({
   }),
   dashboard: router({
     accessStatus: protectedProcedure.query(({ ctx }) => ({ isOwner: isWorkspaceOwner(ctx.user, ENV.ownerOpenId) })),
-    overview: publicProcedure.query(async () => getDashboardOverview(await getPublicWorkspaceUserId())),
+    overview: publicProcedure.query(async () => getDashboardOverview(await ensurePublicWorkspaceInitialized())),
     shortlist: publicProcedure.input(z.object({ dateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() })).query(async ({ input }) =>
-      listShortlist(await getPublicWorkspaceUserId(), input.dateKey ?? getLocalDateKey("America/Toronto")),
+      listShortlist(await ensurePublicWorkspaceInitialized(), input.dateKey ?? getLocalDateKey("America/Toronto")),
     ),
-    history: publicProcedure.query(async () => listJobHistory(await getPublicWorkspaceUserId())),
-    runs: publicProcedure.query(async () => listRuns(await getPublicWorkspaceUserId())),
-    profile: publicProcedure.query(async () => getProfile(await getPublicWorkspaceUserId())),
-    settings: publicProcedure.query(async () => getSettings(await getPublicWorkspaceUserId())),
+    history: publicProcedure.query(async () => listJobHistory(await ensurePublicWorkspaceInitialized())),
+    runs: publicProcedure.query(async () => listRuns(await ensurePublicWorkspaceInitialized())),
+    profile: publicProcedure.query(async () => getProfile(await ensurePublicWorkspaceInitialized())),
+    settings: publicProcedure.query(async () => getSettings(await ensurePublicWorkspaceInitialized())),
     updateSettings: ownerProcedure.input(settingInput).mutation(({ ctx, input }) => updateSettings(ctx.user.id, input)),
     setSourceEnabled: ownerProcedure.input(z.object({ sourceId: z.number().int().positive(), enabled: z.boolean() })).mutation(({ ctx, input }) => updateSourceEnabled(ctx.user.id, input.sourceId, input.enabled)),
     setAction: ownerProcedure

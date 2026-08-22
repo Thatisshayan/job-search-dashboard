@@ -56,3 +56,5 @@
 - [ ] Fix the deployed owner account’s access to the private dashboard without allowing non-owner accounts into the workspace.
 - [ ] Trace and fix the remaining deployed OAuth callback or session-identity failure after the initial owner-role repair did not restore access.
 - [ ] Remove sign-in and owner-only restrictions so the confirmed public dashboard link opens directly while preserving Telegram per-application approval safeguards.
+- [ ] Verify the Telegram bot, webhook, per-job approval callback, and approved browser-review follow-up end to end without any employer submission.
+- [x] Send individually identified original application links for verified shortlist jobs to the paired Telegram chat without submitting any employer application.

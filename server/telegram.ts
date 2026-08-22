@@ -128,6 +128,29 @@ export async function sendFinalBrowserReviewCard(input: { chatId: string; title:
   });
 }
 
+export function originalLinkReviewText(input: { rank: number; score: number; title: string; employer: string; location: string; sourceName: string }) {
+  return `Verified shortlist match #${input.rank} — ${input.score}/100\n\n${input.title}\n${input.employer}\n${input.location}\nSource: ${input.sourceName}\n\nOpen the original application to review the role. Opening this link does not submit an employer application; final confirmation is still required before any submission.`;
+}
+
+export async function sendOriginalLinkReviewCard(input: {
+  chatId: string;
+  rank: number;
+  score: number;
+  title: string;
+  employer: string;
+  location: string;
+  sourceName: string;
+  originalApplyUrl: string;
+}) {
+  return telegramApi<{ message_id: number }>("sendMessage", {
+    chat_id: input.chatId,
+    text: originalLinkReviewText(input),
+    reply_markup: {
+      inline_keyboard: [[{ text: "Open original application", url: input.originalApplyUrl }]],
+    },
+  });
+}
+
 export async function answerTelegramCallback(callbackQueryId: string, text: string) {
   return telegramApi<boolean>("answerCallbackQuery", { callback_query_id: callbackQueryId, text, show_alert: false });
 }

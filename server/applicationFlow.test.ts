@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createApprovalCallback, finalBrowserReviewText, hashApprovalNonce, resolveSingleUseApproval, verifyApprovalCallback } from "./telegram";
+import { createApprovalCallback, finalBrowserReviewText, hashApprovalNonce, originalLinkReviewText, resolveSingleUseApproval, verifyApprovalCallback } from "./telegram";
 
 describe("Telegram application approval tokens", () => {
   it("accepts an intact signed callback and rejects altered callback data", () => {
@@ -39,5 +39,19 @@ describe("Telegram application approval tokens", () => {
     expect(message).toContain("Open the original application");
     expect(message).toContain("final confirmation");
     expect(message).not.toContain("automatically submit");
+  });
+
+  it("labels a direct original-link review without implying approval or submission", () => {
+    const message = originalLinkReviewText({
+      rank: 1,
+      score: 100,
+      title: "Construction Manager",
+      employer: "Example Builder",
+      location: "Toronto, ON",
+      sourceName: "Government of Canada Job Bank",
+    });
+    expect(message).toContain("Verified shortlist match #1");
+    expect(message).toContain("Opening this link does not submit");
+    expect(message).toContain("final confirmation");
   });
 });

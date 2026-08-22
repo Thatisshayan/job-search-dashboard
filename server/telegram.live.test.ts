@@ -22,7 +22,7 @@ describe("live Telegram application approval setup", () => {
 
     await bindTelegramConnection(owner.id, chatId!, "Jobapplicationworkflowbot");
     await setTelegramWebhook(webhookUrl!);
-    const testJob = await createResumeBackedTestJob(owner.id);
+    const testJob = await createResumeBackedTestJob(owner.id, true);
     const application = await prepareApplicationForTelegram(owner.id, testJob.id, true);
 
     expect(application?.status).toBe("awaiting_telegram_approval");

@@ -55,8 +55,8 @@
 - [ ] Extend each Telegram-approved application into a browser-ready, resume-backed preparation flow while requiring final confirmation immediately before the specific employer form is submitted.
 - [ ] Fix the deployed owner account’s access to the private dashboard without allowing non-owner accounts into the workspace.
 - [ ] Trace and fix the remaining deployed OAuth callback or session-identity failure after the initial owner-role repair did not restore access.
-- [ ] Remove sign-in and owner-only restrictions so the confirmed public dashboard link opens directly while preserving Telegram per-application approval safeguards.
+- [x] Remove sign-in and owner-only restrictions so the confirmed public dashboard link opens directly while preserving Telegram per-application approval safeguards.
 - [ ] Verify the Telegram bot, webhook, per-job approval callback, and approved browser-review follow-up end to end without any employer submission.
 - [x] Send individually identified original application links for verified shortlist jobs to the paired Telegram chat without submitting any employer application.
-- [ ] Restore public dashboard data loading in production by resolving the workspace owner from its persisted database record rather than relying exclusively on the deployment owner environment identifier.
-- [ ] Initialize the public workspace owner and verified candidate records in the deployed database when the hosted environment has no existing user record, so public read-only queries can load the current shortlist.
+- [x] Restore public dashboard data loading in production by resolving the workspace owner from its persisted database record rather than relying exclusively on the deployment owner environment identifier.
+- [x] Initialize the public workspace owner and verified candidate records in the deployed database when the hosted environment has no existing user record, so public read-only queries can load the current shortlist.

@@ -117,10 +117,10 @@ export async function prepareApplicationForTelegram(userId: number, jobId: numbe
   return (await db.select().from(applications).where(eq(applications.id, application.id)).limit(1))[0];
 }
 
-export async function createResumeBackedTestJob(userId: number) {
+export async function createResumeBackedTestJob(userId: number, fresh = false) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  const fingerprint = `telegram-e2e-test-${userId}`;
+  const fingerprint = fresh ? `telegram-e2e-test-${userId}-${Date.now()}` : `telegram-e2e-test-${userId}`;
   let job = (await db.select().from(jobs).where(eq(jobs.fingerprint, fingerprint)).limit(1))[0];
   if (!job) {
     await db.insert(jobs).values({

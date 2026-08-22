@@ -50,9 +50,21 @@ export async function getUserByOpenId(openId: string) {
 }
 
 export async function getPublicWorkspaceUserId() {
-  const owner = await getUserByOpenId(ENV.ownerOpenId);
-  if (!owner) throw new Error("The public workspace owner is not configured");
-  return owner.id;
+  const db = await getDb();
+  if (!db) throw new Error("The public workspace database is unavailable");
+
+  const configuredOwner = await getUserByOpenId(ENV.ownerOpenId);
+  if (configuredOwner) return configuredOwner.id;
+
+  // Public mode is intentionally a single-candidate dashboard. If the deployed
+  // owner environment identifier has not been propagated yet, use the persisted
+  // admin owner record rather than failing all read-only public queries.
+  const persistedAdmin = (await db.select().from(users).where(eq(users.role, "admin")).limit(1))[0];
+  if (persistedAdmin) return persistedAdmin.id;
+
+  const onlyWorkspaceUser = (await db.select().from(users).limit(1))[0];
+  if (onlyWorkspaceUser) return onlyWorkspaceUser.id;
+  throw new Error("The public workspace owner is not configured");
 }
 
 const defaultTitles = [

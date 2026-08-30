@@ -13,7 +13,16 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
-import { FileUser, History, PanelLeft, SearchCheck, Settings2 } from "lucide-react";
+import { useIsOwner } from "@/hooks/useIsOwner";
+import {
+  FileUser,
+  History,
+  Map,
+  PanelLeft,
+  SearchCheck,
+  Settings2,
+  Wrench,
+} from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
@@ -23,6 +32,11 @@ const menuItems = [
   { icon: History, label: "Job History", path: "/history" },
   { icon: Settings2, label: "Search Settings", path: "/settings" },
   { icon: FileUser, label: "Resume Profile", path: "/profile" },
+  { icon: Map, label: "Shortlist Map", path: "/map" },
+];
+
+const ownerOnlyMenuItems = [
+  { icon: Wrench, label: "Owner Tools", path: "/owner-tools" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "job-dashboard-sidebar-width";
@@ -30,26 +44,49 @@ const DEFAULT_WIDTH = 276;
 const MIN_WIDTH = 224;
 const MAX_WIDTH = 400;
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const [sidebarWidth, setSidebarWidth] = useState(() => Number(localStorage.getItem(SIDEBAR_WIDTH_KEY)) || DEFAULT_WIDTH);
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const [sidebarWidth, setSidebarWidth] = useState(
+    () => Number(localStorage.getItem(SIDEBAR_WIDTH_KEY)) || DEFAULT_WIDTH
+  );
 
-  useEffect(() => localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth)), [sidebarWidth]);
+  useEffect(
+    () => localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth)),
+    [sidebarWidth]
+  );
 
   return (
-    <SidebarProvider style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}>
-      <DashboardLayoutContent setSidebarWidth={setSidebarWidth}>{children}</DashboardLayoutContent>
+    <SidebarProvider
+      style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
+    >
+      <DashboardLayoutContent setSidebarWidth={setSidebarWidth}>
+        {children}
+      </DashboardLayoutContent>
     </SidebarProvider>
   );
 }
 
-function DashboardLayoutContent({ children, setSidebarWidth }: { children: React.ReactNode; setSidebarWidth: (width: number) => void }) {
+function DashboardLayoutContent({
+  children,
+  setSidebarWidth,
+}: {
+  children: React.ReactNode;
+  setSidebarWidth: (width: number) => void;
+}) {
   const [location, setLocation] = useLocation();
   const { state, toggleSidebar } = useSidebar();
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
   const isCollapsed = state === "collapsed";
-  const activeMenuItem = menuItems.find(item => item.path === location);
+  const { isOwner } = useIsOwner();
+  const visibleMenuItems = isOwner
+    ? [...menuItems, ...ownerOnlyMenuItems]
+    : menuItems;
+  const activeMenuItem = visibleMenuItems.find(item => item.path === location);
 
   useEffect(() => {
     const move = (event: MouseEvent) => {
@@ -73,21 +110,65 @@ function DashboardLayoutContent({ children, setSidebarWidth }: { children: React
     };
   }, [isResizing, setSidebarWidth]);
 
+  const nudgeSidebarWidth = (event: React.KeyboardEvent) => {
+    const step = 16;
+    if (event.key === "ArrowLeft")
+      setSidebarWidth(
+        Math.max(
+          MIN_WIDTH,
+          (sidebarRef.current?.getBoundingClientRect().width ?? DEFAULT_WIDTH) -
+            step
+        )
+      );
+    else if (event.key === "ArrowRight")
+      setSidebarWidth(
+        Math.min(
+          MAX_WIDTH,
+          (sidebarRef.current?.getBoundingClientRect().width ?? DEFAULT_WIDTH) +
+            step
+        )
+      );
+  };
+
   return (
     <>
       <div className="relative" ref={sidebarRef}>
-        <Sidebar collapsible="icon" className="border-r-0" disableTransition={isResizing}>
+        <Sidebar
+          collapsible="icon"
+          className="border-r-0"
+          disableTransition={isResizing}
+        >
           <SidebarHeader className="h-24 justify-center px-3">
             <div className="flex items-center gap-3">
-              <button onClick={toggleSidebar} aria-label="Toggle navigation" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"><PanelLeft className="h-4 w-4" /></button>
-              {!isCollapsed && <div className="min-w-0"><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sidebar-primary">Daily pursuit</p><p className="mt-1 truncate text-base font-bold text-sidebar-foreground">Construction roles</p></div>}
+              <button
+                onClick={toggleSidebar}
+                aria-label="Toggle navigation"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              >
+                <PanelLeft className="h-4 w-4" />
+              </button>
+              {!isCollapsed && (
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sidebar-primary">
+                    Daily pursuit
+                  </p>
+                  <p className="mt-1 truncate text-base font-bold text-sidebar-foreground">
+                    Construction roles
+                  </p>
+                </div>
+              )}
             </div>
           </SidebarHeader>
           <SidebarContent className="gap-0 px-2">
             <SidebarMenu className="gap-1">
-              {menuItems.map(item => (
+              {visibleMenuItems.map(item => (
                 <SidebarMenuItem key={item.path}>
-                  <SidebarMenuButton isActive={location === item.path} onClick={() => setLocation(item.path)} tooltip={item.label} className="h-11 rounded-xl px-3 font-medium text-sidebar-foreground/75 transition-all hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground">
+                  <SidebarMenuButton
+                    isActive={location === item.path}
+                    onClick={() => setLocation(item.path)}
+                    tooltip={item.label}
+                    className="h-11 rounded-xl px-3 font-medium text-sidebar-foreground/75 transition-all hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                  >
                     <item.icon className="h-4.5 w-4.5" />
                     <span>{item.label}</span>
                   </SidebarMenuButton>
@@ -97,15 +178,51 @@ function DashboardLayoutContent({ children, setSidebarWidth }: { children: React
           </SidebarContent>
           <SidebarFooter className="p-3">
             <div className="flex w-full items-center gap-3 rounded-xl p-2 group-data-[collapsible=icon]:justify-center">
-              <Avatar className="h-9 w-9 shrink-0 border border-sidebar-border"><AvatarFallback className="bg-sidebar-primary text-xs font-bold text-sidebar-primary-foreground">SS</AvatarFallback></Avatar>
-              <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden"><p className="truncate text-sm font-semibold text-sidebar-foreground">Shayan Salimi</p><p className="mt-0.5 truncate text-xs text-sidebar-foreground/55">Public dashboard</p></div>
+              <Avatar className="h-9 w-9 shrink-0 border border-sidebar-border">
+                <AvatarFallback className="bg-sidebar-primary text-xs font-bold text-sidebar-primary-foreground">
+                  SS
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
+                <p className="truncate text-sm font-semibold text-sidebar-foreground">
+                  Shayan Salimi
+                </p>
+                <p className="mt-0.5 truncate text-xs text-sidebar-foreground/55">
+                  Public dashboard
+                </p>
+              </div>
             </div>
           </SidebarFooter>
         </Sidebar>
-        {!isCollapsed && <div className="absolute right-0 top-0 z-50 h-full w-1 cursor-col-resize transition-colors hover:bg-sidebar-primary/50" onMouseDown={() => setIsResizing(true)} />}
+        {!isCollapsed && (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize navigation sidebar"
+            aria-valuenow={Math.round(
+              sidebarRef.current?.getBoundingClientRect().width ?? DEFAULT_WIDTH
+            )}
+            aria-valuemin={MIN_WIDTH}
+            aria-valuemax={MAX_WIDTH}
+            tabIndex={0}
+            className="absolute right-0 top-0 z-50 h-full w-1 cursor-col-resize transition-colors hover:bg-sidebar-primary/50 focus-visible:bg-sidebar-primary/60 focus-visible:outline-none"
+            onMouseDown={() => setIsResizing(true)}
+            onKeyDown={nudgeSidebarWidth}
+          />
+        )}
       </div>
       <SidebarInset>
-        {isMobile && <div className="sticky top-0 z-40 flex h-16 items-center gap-3 border-b bg-background/90 px-4 backdrop-blur"><SidebarTrigger className="h-10 w-10 rounded-xl" /><div><p className="text-sm font-bold">{activeMenuItem?.label ?? "Construction roles"}</p><p className="text-xs text-muted-foreground">Shayan’s private workspace</p></div></div>}
+        {isMobile && (
+          <div className="sticky top-0 z-40 flex h-16 items-center gap-3 border-b bg-background/90 px-4 backdrop-blur">
+            <SidebarTrigger className="h-10 w-10 rounded-xl" />
+            <div>
+              <p className="text-sm font-bold">
+                {activeMenuItem?.label ?? "Construction roles"}
+              </p>
+              <p className="text-xs text-muted-foreground">Public dashboard</p>
+            </div>
+          </div>
+        )}
         <main className="min-h-dvh flex-1 p-4 md:p-7">{children}</main>
       </SidebarInset>
     </>

@@ -25,29 +25,20 @@ export function getSessionCookieOptions(
   req: Request
 ): Pick<CookieOptions, "domain" | "httpOnly" | "path" | "sameSite" | "secure"> {
   const hostname = req.hostname ?? "";
-  const isLocalDevelopmentHost = LOCAL_HOSTS.has(hostname) || isIpAddress(hostname);
-  // const hostname = req.hostname;
-  // const shouldSetDomain =
-  //   hostname &&
-  //   !LOCAL_HOSTS.has(hostname) &&
-  //   !isIpAddress(hostname) &&
-  //   hostname !== "127.0.0.1" &&
-  //   hostname !== "::1";
-
-  // const domain =
-  //   shouldSetDomain && !hostname.startsWith(".")
-  //     ? `.${hostname}`
-  //     : shouldSetDomain
-  //       ? hostname
-  //       : undefined;
+  const isLocalDevelopmentHost =
+    LOCAL_HOSTS.has(hostname) || isIpAddress(hostname);
 
   return {
     httpOnly: true,
     path: "/",
-    sameSite: "none",
+    // The dashboard is same-origin (client and API share one host), and the only
+    // cross-site navigation into it is the OAuth callback's top-level GET redirect,
+    // which SameSite=Lax still allows. Lax (vs None) stops this cookie from being
+    // attached to cross-site fetch/form requests, closing a CSRF gap on owner
+    // mutations (setAction, updateSettings, importVerifiedListings, ...).
+    sameSite: "lax",
     // Hosted requests arrive through a TLS-terminating proxy that may not retain
-    // x-forwarded-proto. SameSite=None cookies are rejected by browsers unless
-    // Secure is set, so default to Secure for every non-local deployment host.
+    // x-forwarded-proto, so default to Secure for every non-local deployment host.
     secure: !isLocalDevelopmentHost || isSecureRequest(req),
   };
 }

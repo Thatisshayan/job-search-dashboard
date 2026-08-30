@@ -1,35 +1,450 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useIsOwner } from "@/hooks/useIsOwner";
 import { trpc } from "@/lib/trpc";
-import { Check, Clock3, DatabaseZap, MapPinned, Save, ShieldAlert } from "lucide-react";
+import {
+  Clock3,
+  DatabaseZap,
+  Eye,
+  MapPinned,
+  Plus,
+  Save,
+  ShieldAlert,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-type FormState = { titles: string; city: string; radiusKm: number; minimumScore: number; shortlistLimit: number; scheduledTime: string; notifications: boolean; fullTimeOnly: boolean };
-const blank: FormState = { titles: "", city: "Toronto, Ontario", radiusKm: 75, minimumScore: 60, shortlistLimit: 20, scheduledTime: "07:30", notifications: true, fullTimeOnly: true };
+type FormState = {
+  titles: string;
+  city: string;
+  radiusKm: number;
+  minimumScore: number;
+  shortlistLimit: number;
+  scheduledTime: string;
+  notifications: boolean;
+  fullTimeOnly: boolean;
+};
+const blank: FormState = {
+  titles: "",
+  city: "Toronto, Ontario",
+  radiusKm: 75,
+  minimumScore: 60,
+  shortlistLimit: 20,
+  scheduledTime: "07:30",
+  notifications: true,
+  fullTimeOnly: true,
+};
 
 export default function SearchSettings() {
+  const { isOwner } = useIsOwner();
   const settingsQuery = trpc.dashboard.settings.useQuery();
   const utils = trpc.useUtils();
   const [form, setForm] = useState<FormState>(blank);
-  useEffect(() => { const value = settingsQuery.data?.settings; if (value) setForm({ titles: value.targetTitles.join(", "), city: value.city, radiusKm: value.radiusKm, minimumScore: value.minimumScore, shortlistLimit: value.shortlistLimit, scheduledTime: value.scheduledTime, notifications: value.dailyNotificationEnabled, fullTimeOnly: value.employmentTypes.includes("full-time") }); }, [settingsQuery.data]);
-  const mutation = trpc.dashboard.updateSettings.useMutation({ onSuccess: () => { utils.dashboard.settings.invalidate(); utils.dashboard.overview.invalidate(); toast.success("Search settings saved", { description: "Your next refresh will use the updated preferences." }); }, onError: error => toast.error("Could not save settings", { description: error.message }) });
-  const sourceMutation = trpc.dashboard.setSourceEnabled.useMutation({ onSuccess: () => { utils.dashboard.settings.invalidate(); utils.dashboard.overview.invalidate(); toast.success("Source setting updated"); }, onError: error => toast.error("Could not update source", { description: error.message }) });
-  const save = () => mutation.mutate({ targetTitles: form.titles.split(",").map(title => title.trim()).filter(Boolean), city: form.city, radiusKm: form.radiusKm, employmentTypes: form.fullTimeOnly ? ["full-time"] : ["any"], minimumScore: form.minimumScore, shortlistLimit: form.shortlistLimit, scheduledTime: form.scheduledTime, dailyNotificationEnabled: form.notifications });
+  const [newSourceName, setNewSourceName] = useState("");
+  const [newSourceUrl, setNewSourceUrl] = useState("");
+  useEffect(() => {
+    const value = settingsQuery.data?.settings;
+    if (value)
+      setForm({
+        titles: value.targetTitles.join(", "),
+        city: value.city,
+        radiusKm: value.radiusKm,
+        minimumScore: value.minimumScore,
+        shortlistLimit: value.shortlistLimit,
+        scheduledTime: value.scheduledTime,
+        notifications: value.dailyNotificationEnabled,
+        fullTimeOnly: value.employmentTypes.includes("full-time"),
+      });
+  }, [settingsQuery.data]);
+  const mutation = trpc.dashboard.updateSettings.useMutation({
+    onSuccess: () => {
+      utils.dashboard.settings.invalidate();
+      utils.dashboard.overview.invalidate();
+      toast.success("Search settings saved", {
+        description: "Your next refresh will use the updated preferences.",
+      });
+    },
+    onError: error =>
+      toast.error("Could not save settings", { description: error.message }),
+  });
+  const sourceMutation = trpc.dashboard.setSourceEnabled.useMutation({
+    onSuccess: () => {
+      utils.dashboard.settings.invalidate();
+      utils.dashboard.overview.invalidate();
+      toast.success("Source setting updated");
+    },
+    onError: error =>
+      toast.error("Could not update source", { description: error.message }),
+  });
+  const addSourceMutation = trpc.dashboard.addSource.useMutation({
+    onSuccess: () => {
+      utils.dashboard.settings.invalidate();
+      utils.dashboard.overview.invalidate();
+      toast.success("Source registered");
+      setNewSourceName("");
+      setNewSourceUrl("");
+    },
+    onError: error =>
+      toast.error("Could not register source", { description: error.message }),
+  });
+  const save = () =>
+    mutation.mutate({
+      targetTitles: form.titles
+        .split(",")
+        .map(title => title.trim())
+        .filter(Boolean),
+      city: form.city,
+      radiusKm: form.radiusKm,
+      employmentTypes: form.fullTimeOnly ? ["full-time"] : ["any"],
+      minimumScore: form.minimumScore,
+      shortlistLimit: form.shortlistLimit,
+      scheduledTime: form.scheduledTime,
+      dailyNotificationEnabled: form.notifications,
+    });
+  const addSource = () => {
+    if (!newSourceName.trim()) return;
+    addSourceMutation.mutate({
+      name: newSourceName.trim(),
+      baseUrl: newSourceUrl.trim() || undefined,
+    });
+  };
 
-  if (settingsQuery.isLoading) return <div className="mx-auto max-w-5xl space-y-5"><div className="h-12 w-64 animate-pulse rounded-xl bg-muted" /><div className="h-96 animate-pulse rounded-2xl bg-muted" /></div>;
-  return <div className="mx-auto max-w-5xl"><header className="mb-7"><p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">Search guardrails</p><h1 className="mt-2 text-3xl font-extrabold tracking-tight md:text-4xl">Search settings</h1><p className="mt-2 text-sm text-muted-foreground">Control what the daily run searches, scores, and delivers. The system never submits an application automatically.</p></header>
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]"><div className="space-y-6"><Card><CardHeader><CardTitle>Role focus</CardTitle><CardDescription>Jobs are scored against verified construction experience and clear application readiness.</CardDescription></CardHeader><CardContent><Label htmlFor="titles">Target job titles</Label><Textarea id="titles" value={form.titles} onChange={event => setForm({ ...form, titles: event.target.value })} className="mt-2 min-h-28" /><p className="mt-2 text-xs text-muted-foreground">Separate titles with commas. The scoring engine awards up to 30 points for role/title alignment.</p><div className="mt-4 flex items-center justify-between rounded-xl border bg-muted/30 px-4 py-3"><div><p className="text-sm font-semibold">Full-time roles only</p><p className="mt-1 text-xs text-muted-foreground">Apply a hard employment-type filter before roles are scored.</p></div><Switch checked={form.fullTimeOnly} onCheckedChange={fullTimeOnly => setForm({ ...form, fullTimeOnly })} aria-label="Toggle full-time roles only" /></div><div className="mt-4 flex items-center gap-2"><Badge variant="outline">Original apply link required</Badge></div></CardContent></Card>
-      <Card><CardHeader><CardTitle>Location & shortlist quality</CardTitle><CardDescription>Default coverage is Toronto plus a 75 km GTA radius.</CardDescription></CardHeader><CardContent className="space-y-6"><div><Label htmlFor="city">Search center</Label><Input id="city" value={form.city} onChange={event => setForm({ ...form, city: event.target.value })} className="mt-2" /></div><RangeControl label="GTA radius" value={form.radiusKm} suffix="km" min={25} max={150} step={5} onChange={radiusKm => setForm({ ...form, radiusKm })} /><RangeControl label="Minimum fit score" value={form.minimumScore} suffix="/100" min={0} max={100} step={5} onChange={minimumScore => setForm({ ...form, minimumScore })} /><RangeControl label="Daily shortlist limit" value={form.shortlistLimit} suffix="roles" min={1} max={20} step={1} onChange={shortlistLimit => setForm({ ...form, shortlistLimit })} /></CardContent></Card>
-      <Card><CardHeader><CardTitle>Daily delivery</CardTitle><CardDescription>The schedule runs in America/Toronto time and is safe to retry without duplicating your shortlist.</CardDescription></CardHeader><CardContent className="space-y-5"><div><Label htmlFor="schedule">Daily run time</Label><div className="mt-2 flex items-center gap-2"><Clock3 className="h-4 w-4 text-primary" /><Input id="schedule" type="time" value={form.scheduledTime} onChange={event => setForm({ ...form, scheduledTime: event.target.value })} className="w-36" /><span className="text-sm text-muted-foreground">America/Toronto</span></div></div><div className="flex items-center justify-between rounded-xl border bg-muted/30 px-4 py-3"><div><p className="text-sm font-semibold">Daily owner notification</p><p className="mt-1 text-xs text-muted-foreground">Send a concise top-match summary after a successful daily run.</p></div><Switch checked={form.notifications} onCheckedChange={notifications => setForm({ ...form, notifications })} aria-label="Toggle daily owner notification" /></div></CardContent></Card>
-      <Button onClick={save} disabled={mutation.isPending} size="lg" className="w-full sm:w-auto">{mutation.isPending ? "Saving…" : <><Save className="mr-2 h-4 w-4" />Save search settings</>}</Button></div>
-      <aside className="space-y-6"><Card className="border-primary/15 bg-primary/[0.035]"><CardHeader><CardTitle className="flex items-center gap-2 text-base"><MapPinned className="h-4 w-4 text-primary" />Score guardrails</CardTitle></CardHeader><CardContent className="space-y-3 text-sm leading-6 text-muted-foreground"><p>Roles are ranked using the fixed 30/25/15/10/10/10 component weights.</p><p>Listings are penalized for missing apply links, part-time status, non-GTA location, expiry, and duplicates.</p><p>Unverified licensure, work authorization, or certifications are always presented as gaps, never assumed.</p></CardContent></Card><Card><CardHeader><CardTitle className="flex items-center gap-2 text-base"><DatabaseZap className="h-4 w-4 text-primary" />Authorized sources</CardTitle><CardDescription>Enable only permitted source connections. The dashboard will not scrape restricted job boards.</CardDescription></CardHeader><CardContent className="space-y-3">{settingsQuery.data?.sources.map(source => <div key={source.id} className="rounded-xl border p-3"><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-semibold">{source.name}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{source.lastStatus || "Not checked"}</p></div><Switch checked={source.enabled} onCheckedChange={enabled => sourceMutation.mutate({ sourceId: source.id, enabled })} disabled={sourceMutation.isPending} aria-label={`Toggle ${source.name}`} /></div></div>)}</CardContent></Card><div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900"><ShieldAlert className="mb-2 h-4 w-4" />A licensed job-data credential or permitted source connection is still required before daily collection can begin.</div></aside></div></div>;
+  if (settingsQuery.isLoading)
+    return (
+      <div className="mx-auto max-w-5xl space-y-5">
+        <div className="h-12 w-64 animate-pulse rounded-xl bg-muted" />
+        <div className="h-96 animate-pulse rounded-2xl bg-muted" />
+      </div>
+    );
+  return (
+    <div className="mx-auto max-w-5xl">
+      <header className="mb-7">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
+          Search guardrails
+        </p>
+        <h1 className="mt-2 text-3xl font-extrabold tracking-tight md:text-4xl">
+          Search settings
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Control what the daily run searches, scores, and delivers. The system
+          never submits an application automatically.
+        </p>
+        {!isOwner && (
+          <div className="mt-4 flex items-center gap-2 rounded-xl border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+            <Eye className="h-4 w-4" />
+            You're viewing the public read-only copy of these settings. Only the
+            dashboard owner can change them.
+          </div>
+        )}
+      </header>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="space-y-6">
+          <fieldset disabled={!isOwner} className="contents">
+            <Card>
+              <CardHeader>
+                <CardTitle>Role focus</CardTitle>
+                <CardDescription>
+                  Jobs are scored against verified construction experience and
+                  clear application readiness.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Label htmlFor="titles">Target job titles</Label>
+                <Textarea
+                  id="titles"
+                  value={form.titles}
+                  onChange={event =>
+                    setForm({ ...form, titles: event.target.value })
+                  }
+                  className="mt-2 min-h-28"
+                />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Separate titles with commas. The scoring engine awards up to
+                  30 points for role/title alignment.
+                </p>
+                <div className="mt-4 flex items-center justify-between rounded-xl border bg-muted/30 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-semibold">
+                      Full-time roles only
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Apply a hard employment-type filter before roles are
+                      scored.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={form.fullTimeOnly}
+                    onCheckedChange={fullTimeOnly =>
+                      setForm({ ...form, fullTimeOnly })
+                    }
+                    aria-label="Toggle full-time roles only"
+                  />
+                </div>
+                <div className="mt-4 flex items-center gap-2">
+                  <Badge variant="outline">Original apply link required</Badge>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Location & shortlist quality</CardTitle>
+                <CardDescription>
+                  Default coverage is Toronto plus a 75 km GTA radius.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div>
+                  <Label htmlFor="city">Search center</Label>
+                  <Input
+                    id="city"
+                    value={form.city}
+                    onChange={event =>
+                      setForm({ ...form, city: event.target.value })
+                    }
+                    className="mt-2"
+                  />
+                </div>
+                <RangeControl
+                  label="GTA radius"
+                  value={form.radiusKm}
+                  suffix="km"
+                  min={25}
+                  max={150}
+                  step={5}
+                  onChange={radiusKm => setForm({ ...form, radiusKm })}
+                />
+                <RangeControl
+                  label="Minimum fit score"
+                  value={form.minimumScore}
+                  suffix="/100"
+                  min={0}
+                  max={100}
+                  step={5}
+                  onChange={minimumScore => setForm({ ...form, minimumScore })}
+                />
+                <RangeControl
+                  label="Daily shortlist limit"
+                  value={form.shortlistLimit}
+                  suffix="roles"
+                  min={1}
+                  max={20}
+                  step={1}
+                  onChange={shortlistLimit =>
+                    setForm({ ...form, shortlistLimit })
+                  }
+                />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Daily delivery</CardTitle>
+                <CardDescription>
+                  The schedule runs in America/Toronto time and is safe to retry
+                  without duplicating your shortlist.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div>
+                  <Label htmlFor="schedule">Daily run time</Label>
+                  <div className="mt-2 flex items-center gap-2">
+                    <Clock3 className="h-4 w-4 text-primary" />
+                    <Input
+                      id="schedule"
+                      type="time"
+                      value={form.scheduledTime}
+                      onChange={event =>
+                        setForm({ ...form, scheduledTime: event.target.value })
+                      }
+                      className="w-36"
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      America/Toronto
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between rounded-xl border bg-muted/30 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-semibold">
+                      Daily owner notification
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Send a concise top-match summary after a successful daily
+                      run.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={form.notifications}
+                    onCheckedChange={notifications =>
+                      setForm({ ...form, notifications })
+                    }
+                    aria-label="Toggle daily owner notification"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+            <Button
+              onClick={save}
+              disabled={mutation.isPending || !isOwner}
+              size="lg"
+              className="w-full sm:w-auto"
+            >
+              {mutation.isPending ? (
+                "Saving…"
+              ) : (
+                <>
+                  <Save className="mr-2 h-4 w-4" />
+                  Save search settings
+                </>
+              )}
+            </Button>
+          </fieldset>
+        </div>
+        <aside className="space-y-6">
+          <Card className="border-primary/15 bg-primary/[0.035]">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <MapPinned className="h-4 w-4 text-primary" />
+                Score guardrails
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm leading-6 text-muted-foreground">
+              <p>
+                Roles are ranked using the fixed 30/25/15/10/10/10 component
+                weights.
+              </p>
+              <p>
+                Listings are penalized for missing apply links, part-time
+                status, non-GTA location, expiry, and duplicates.
+              </p>
+              <p>
+                Unverified licensure, work authorization, or certifications are
+                always presented as gaps, never assumed.
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <DatabaseZap className="h-4 w-4 text-primary" />
+                Authorized sources
+              </CardTitle>
+              <CardDescription>
+                Enable only permitted source connections. The dashboard will not
+                scrape restricted job boards.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {settingsQuery.data?.sources.map(source => (
+                <div key={source.id} className="rounded-xl border p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold">{source.name}</p>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        {source.lastStatus || "Not checked"}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={source.enabled}
+                      onCheckedChange={enabled =>
+                        sourceMutation.mutate({ sourceId: source.id, enabled })
+                      }
+                      disabled={sourceMutation.isPending || !isOwner}
+                      aria-label={`Toggle ${source.name}`}
+                    />
+                  </div>
+                </div>
+              ))}
+              {isOwner && (
+                <div className="rounded-xl border border-dashed p-3">
+                  <p className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Register a new source
+                  </p>
+                  <div className="space-y-2">
+                    <Input
+                      value={newSourceName}
+                      onChange={event => setNewSourceName(event.target.value)}
+                      placeholder="Source name (e.g. Employer careers page)"
+                    />
+                    <Input
+                      value={newSourceUrl}
+                      onChange={event => setNewSourceUrl(event.target.value)}
+                      placeholder="Base URL (optional)"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full"
+                      disabled={
+                        addSourceMutation.isPending || !newSourceName.trim()
+                      }
+                      onClick={addSource}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add source
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900">
+            <ShieldAlert className="mb-2 h-4 w-4" />A licensed job-data
+            credential or permitted source connection is still required before
+            daily collection can begin. Registering a source here only records
+            it as authorized — listings still need to be added individually as
+            verified imports.
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
 }
 
-function RangeControl({ label, value, suffix, min, max, step, onChange }: { label: string; value: number; suffix: string; min: number; max: number; step: number; onChange: (value: number) => void }) { return <div><div className="flex items-center justify-between"><Label>{label}</Label><span className="font-data text-sm font-medium text-primary">{value} {suffix}</span></div><Slider className="mt-4" value={[value]} min={min} max={max} step={step} onValueChange={next => onChange(next[0] ?? value)} /></div>; }
+function RangeControl({
+  label,
+  value,
+  suffix,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  suffix: string;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <Label>{label}</Label>
+        <span className="font-data text-sm font-medium text-primary">
+          {value} {suffix}
+        </span>
+      </div>
+      <Slider
+        className="mt-4"
+        value={[value]}
+        min={min}
+        max={max}
+        step={step}
+        onValueChange={next => onChange(next[0] ?? value)}
+      />
+    </div>
+  );
+}

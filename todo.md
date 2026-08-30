@@ -1,5 +1,14 @@
 # Project TODO
 
+**Composio integration: abandoned.** The eleven Composio entries below never resolved
+past repeated credential/permission/connection failures (invalid AuthKit JWT, revoked
+Tool Execution scope, MCP connection-closed errors). Verified listings are sourced
+manually via `dashboard.importVerifiedListings` instead (see `server/verifiedListingImport.ts`
+and the "Add a verified listing" owner tool). `server/composio.credentials.test.ts` has
+been removed since it made a live network call requiring `COMPOSIO_API_KEY` and would
+otherwise fail every CI run. Revisit only if a Composio-based LinkedIn/Indeed source
+adapter becomes a real priority.
+
 - [x] Implement owner-authenticated access and wrap all dashboard routes in the existing dashboard layout.
 - [x] Create persistent database models for candidate profiles, search settings, normalized jobs, daily shortlist entries, scorecards, job actions, source configurations, and job-run logs.
 - [x] Add the verified Shayan Salimi candidate profile with resume-grounded experience, skills, education, and the selected ATS résumé metadata.

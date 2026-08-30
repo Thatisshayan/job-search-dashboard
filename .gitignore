@@ -2,6 +2,9 @@
 **/node_modules
 .pnpm-store/
 
+# Serena MCP local index/cache (project-local tooling state, not source)
+.serena/
+
 # Build outputs
 dist/
 build/
@@ -29,6 +32,7 @@ build/
 .Trashes
 ehthumbs.db
 Thumbs.db
+desktop.ini
 
 # Logs
 logs

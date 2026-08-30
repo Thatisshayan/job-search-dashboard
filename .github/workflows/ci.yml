@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm check
+
+      - name: Test
+        run: pnpm test
+        env:
+          # Live/DB-integration tests (telegram.live.test.ts, telegram.originalLinks.live.test.ts,
+          # telegram.credentials.test.ts, applicationReplay.integration.test.ts) self-skip
+          # unless explicitly opted into against a real, seeded environment — never set these here.
+          LIVE_TELEGRAM_E2E: ""
+          LIVE_DB_INTEGRATION: ""
+          LIVE_JOBBANK_IMPORT: ""
+          DATABASE_URL: "mysql://ci:ci@localhost:3306/ci"
+          JWT_SECRET: "ci-test-secret"
+          OWNER_OPEN_ID: "ci-owner"
+          OAUTH_SERVER_URL: "https://ci.invalid"
+          VITE_APP_ID: "ci-app"
+
+      - name: Build
+        run: pnpm build
+        env:
+          DATABASE_URL: "mysql://ci:ci@localhost:3306/ci"
+          JWT_SECRET: "ci-test-secret"
+          OWNER_OPEN_ID: "ci-owner"
+          OAUTH_SERVER_URL: "https://ci.invalid"
+          VITE_APP_ID: "ci-app"

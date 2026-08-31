@@ -316,7 +316,11 @@ before building.
 - [x] Unit tests for the pure mapping/token-extraction logic
   (`greenhouseBoard.test.ts`), following the same "pure logic vs. I/O" split
   used everywhere else in this codebase.
-- [ ] `pnpm check`/`test`/`build` — pending as of this write-up, see commit.
+- [x] `pnpm check`/`test`/`build` all clean (68 tests passing, including 8
+  new for `greenhouseBoard.test.ts`).
+- [x] **Deployed to Railway 2026-08-31**: build log confirms `npx camoufox-js
+  fetch` re-downloaded the 663MB binary correctly on this deploy too;
+  service healthy (`200`) after deploy.
 - [ ] Not yet live-tested: a real user running `/watch <company>` against a
   real board, confirming a real Greenhouse-hosted job actually reaches the
   shortlist and triggers Phase 10's auto-submit branch end to end.

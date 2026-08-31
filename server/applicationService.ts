@@ -10,13 +10,16 @@ import {
 import { getDb } from "./db";
 import {
   createApprovalCallback,
+  fromGreenhouseConfirmCallback,
   hashApprovalNonce,
   resolveSingleUseApproval,
   sendApprovalCard,
   sendPhotoBuffer,
+  toGreenhouseConfirmCallback,
   verifyApprovalCallback,
 } from "./telegram";
 import { isGreenhouseApplyUrl, runGreenhouseApplication } from "./autoApply/greenhouse";
+import { discardPendingGreenhouseSubmission, savePendingGreenhouseSubmission, takePendingGreenhouseSubmission } from "./autoApply/pendingSubmissions";
 import { buildTailoredPackageForJob } from "./telegramBot/tailoring";
 
 type ApplicationStatus =
@@ -235,13 +238,19 @@ export async function prepareGreenhouseAutoSubmitConfirmation(userId: number, jo
     return { ok: false, reason: "No email on file for this candidate — resumes must state a contact email before auto-submit can fill a real application form." };
   }
 
+  const candidate = { fullName: pkg.profile.displayName, email: pkg.profile.email, phone: pkg.profile.phone ?? undefined };
   const result = await runGreenhouseApplication({
     applyUrl: job.originalApplyUrl,
-    candidate: { fullName: pkg.profile.displayName, email: pkg.profile.email, phone: pkg.profile.phone ?? undefined },
+    candidate,
     resumePdf: pkg.resumePdf,
     coverLetterText: pkg.materials.coverLetter,
     submit: false,
   });
+
+  // Cache exactly what was just shown in the screenshot below — the real
+  // submit on CONFIRM must use this, not a freshly (and non-deterministically)
+  // regenerated resume/cover letter. See pendingSubmissions.ts.
+  savePendingGreenhouseSubmission(application.id, { resumePdf: pkg.resumePdf, coverLetterText: pkg.materials.coverLetter, candidate });
 
   const nonce = crypto.randomBytes(18).toString("base64url");
   const approvalExpiresAt = new Date(Date.now() + 30 * 60_000);
@@ -271,8 +280,8 @@ export async function prepareGreenhouseAutoSubmitConfirmation(userId: number, jo
       score: null,
       rationale: "This is the final, irreversible step — tapping Confirm submits the form above to the employer for real.",
       testMode: false,
-      approveCallback: createApprovalCallback(application.id, "approve", nonce).replace(/^v1\./, "v1confirm."),
-      declineCallback: createApprovalCallback(application.id, "decline", nonce).replace(/^v1\./, "v1confirm."),
+      approveCallback: toGreenhouseConfirmCallback(createApprovalCallback(application.id, "approve", nonce)),
+      declineCallback: toGreenhouseConfirmCallback(createApprovalCallback(application.id, "decline", nonce)),
     });
   }
 
@@ -286,7 +295,8 @@ export async function prepareGreenhouseAutoSubmitConfirmation(userId: number, jo
  * happen — see DECISIONS.md D5.
  */
 export async function processGreenhouseConfirmationCallback(input: { callbackId: string; chatId: string; data: string }) {
-  const callback = verifyApprovalCallback(input.data.replace(/^v1confirm\./, "v1."));
+  const unwrapped = fromGreenhouseConfirmCallback(input.data);
+  const callback = unwrapped ? verifyApprovalCallback(unwrapped) : null;
   if (!callback) return { state: "ignored" as const, text: "This confirmation is invalid or has been altered." };
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
@@ -325,21 +335,27 @@ export async function processGreenhouseConfirmationCallback(input: { callbackId:
   if (header.affectedRows !== 1) return { state: "ignored" as const, text: "This confirmation was already handled." };
 
   if (targetStatus === "declined") {
+    discardPendingGreenhouseSubmission(application.id);
     return { state: "declined" as const, applicationId: application.id, text: "Submission declined. Nothing was sent to the employer." };
   }
 
-  const pkg = await buildTailoredPackageForJob(application.userId, application.jobId);
-  if (!pkg || !pkg.profile.email) {
+  // Must use exactly what the dry-run screenshot showed — never regenerate
+  // here, since a fresh LLM call could silently produce different content
+  // than what the user actually reviewed and confirmed. If the cache is
+  // gone (process restarted, or the 30-minute window lapsed), fail safe to
+  // the manual-link flow rather than submit something unreviewed.
+  const pending = takePendingGreenhouseSubmission(application.id);
+  if (!pending) {
     await db.update(applications).set({ status: "ready_for_final_confirmation" }).where(eq(applications.id, application.id));
-    return { state: "failed" as const, applicationId: application.id, text: "Couldn't re-verify candidate details for submission — falling back to the manual apply link instead. Nothing was sent." };
+    return { state: "failed" as const, applicationId: application.id, text: "The reviewed version of this application is no longer available — falling back to the manual apply link. Nothing was sent. Tap Approve again to regenerate and re-review." };
   }
 
   try {
     const result = await runGreenhouseApplication({
       applyUrl: job.originalApplyUrl,
-      candidate: { fullName: pkg.profile.displayName, email: pkg.profile.email, phone: pkg.profile.phone ?? undefined },
-      resumePdf: pkg.resumePdf,
-      coverLetterText: pkg.materials.coverLetter,
+      candidate: pending.candidate,
+      resumePdf: pending.resumePdf,
+      coverLetterText: pending.coverLetterText,
       submit: true,
     });
     if (!result.submitted) throw new Error("Submission did not complete");

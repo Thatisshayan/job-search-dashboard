@@ -74,6 +74,31 @@ export function verifyApprovalCallback(value: string): ApprovalCallback | null {
   return { applicationId, decision, nonce };
 }
 
+/**
+ * Phase 10 / DECISIONS.md D5: the Greenhouse dry-run screenshot's
+ * CONFIRM/DECLINE card reuses `createApprovalCallback`/`verifyApprovalCallback`'s
+ * signing but under a distinct `v1confirm.` prefix, so it can never be
+ * confused with or replay the original Approve/Decline callback (same
+ * signature, different top-level token). These two functions are the only
+ * place that prefix swap happens, so both directions stay in sync.
+ */
+const GREENHOUSE_CONFIRM_PREFIX = "v1confirm.";
+
+export function toGreenhouseConfirmCallback(callback: string): string {
+  if (!callback.startsWith("v1.")) throw new Error("Expected a v1. approval callback");
+  return GREENHOUSE_CONFIRM_PREFIX + callback.slice("v1.".length);
+}
+
+export function isGreenhouseConfirmCallback(value: string): boolean {
+  return value.startsWith(GREENHOUSE_CONFIRM_PREFIX);
+}
+
+/** Returns null if `value` isn't a v1confirm. callback (nothing to unwrap). */
+export function fromGreenhouseConfirmCallback(value: string): string | null {
+  if (!value.startsWith(GREENHOUSE_CONFIRM_PREFIX)) return null;
+  return "v1." + value.slice(GREENHOUSE_CONFIRM_PREFIX.length);
+}
+
 async function telegramApi<T>(method: string, payload: Record<string, unknown>): Promise<T> {
   const response = await fetch(`https://api.telegram.org/bot${getBotToken()}/${method}`, {
     method: "POST",

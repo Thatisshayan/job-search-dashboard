@@ -265,13 +265,38 @@ manual-link behavior.
   network calls in the test suite) — the same "pure logic vs. I/O" split
   used everywhere else in this codebase.
 
-**Still open:**
-- [ ] A real dry-run test against an actual Greenhouse posting (Adzuna
-  results include Greenhouse-hosted listings sometimes, but this hasn't
-  been confirmed to actually trigger yet — needs a live shortlisted job
-  with a `boards.greenhouse.io`/`job-boards.greenhouse.io` apply URL to
-  exercise `isGreenhouseApplyUrl()`'s branch in `telegramWebhook.ts` for
-  real).
+**Confirmed real limitation (2026-08-31), found while attempting live
+verification — this blocks the item above, not a "still needs testing"
+gap but an actual unreachable-code problem:** every real Adzuna result's
+`redirect_url` (which `adzuna.ts`'s `adzunaJobToVerifiedListing` maps
+directly to `originalApplyUrl`) points to Adzuna's own `adzuna.ca/details/...`
+landing page — confirmed by pulling live results with the production
+Adzuna credentials. That page returns `200` directly, no HTTP redirect to
+the employer's real site; the actual "Apply now" link is presumably
+embedded in that page's HTML, not exposed as API data. **This means
+`isGreenhouseApplyUrl(job.originalApplyUrl)` can never match a real,
+Adzuna-discovered job today** — Phase 10's entire auto-submit branch is
+fully built, tested, and deployed, but currently unreachable in production.
+Not a bug in the Greenhouse code itself; a gap in what URL the job-discovery
+pipeline hands it.
+
+Options on the table, none decided yet:
+1. Resolve the real employer URL by fetching and parsing Adzuna's landing-page
+   HTML for the outbound apply link — this is scraping Adzuna's *website*
+   (not their documented API), a different and more fragile mechanism than
+   a data field, and reopens the exact fragility/ToS concern D1 was written
+   to avoid; worth checking Adzuna's terms before attempting.
+2. Accept the limitation as a known, documented gap for now — the code is
+   correct and ready, just dormant until discovery can supply real URLs.
+3. Add a second job-discovery path specifically to feed Phase 10 that does
+   expose real employer URLs, separate from Adzuna's role as primary
+   discovery.
+
+- [ ] Once real employer URLs are reachable (whichever option above), a
+  real dry-run test against an actual Greenhouse posting — needs a live
+  shortlisted job with a `boards.greenhouse.io`/`job-boards.greenhouse.io`
+  apply URL to exercise `isGreenhouseApplyUrl()`'s branch in
+  `telegramWebhook.ts` for real.
 - [ ] Once the dry-run/screenshot step is confirmed correct, a real CONFIRM
   against a posting the user is genuinely willing to apply to.
 

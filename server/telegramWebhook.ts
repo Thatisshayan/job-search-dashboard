@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { prepareGreenhouseAutoSubmitConfirmation, processGreenhouseConfirmationCallback, processTelegramApprovalCallback } from "./applicationService";
 import { isGreenhouseApplyUrl } from "./autoApply/greenhouse";
-import { answerTelegramCallback, isValidTelegramWebhookSecret, markApprovalCardResolved, sendFinalBrowserReviewCard } from "./telegram";
+import { answerTelegramCallback, isGreenhouseConfirmCallback, isValidTelegramWebhookSecret, markApprovalCardResolved, sendFinalBrowserReviewCard } from "./telegram";
 import { advanceOnboardingStep, handleIncomingMessage } from "./telegramBot/handler";
 import { getConversation } from "./telegramBot/db";
 import { sendTailoredMaterialsForJob } from "./telegramBot/tailoring";
@@ -53,7 +53,7 @@ export function registerTelegramWebhook(app: Express) {
     // CONFIRM/DECLINE tap on a Greenhouse dry-run screenshot. Kept as a
     // distinct callback prefix (v1confirm.) so it can never be confused with
     // or replay the original Approve/Decline callback below.
-    if (data.startsWith("v1confirm.")) {
+    if (isGreenhouseConfirmCallback(data)) {
       try {
         const outcome = await processGreenhouseConfirmationCallback({ callbackId: String(callback.id), chatId, data });
         await answerTelegramCallback(String(callback.id), outcome.text);

@@ -1,6 +1,7 @@
 import { sendOriginalLinkReviewCard, sendPlainMessage } from "../telegram";
-import { listShortlist } from "../db";
+import { getProfile, listShortlist } from "../db";
 import { getLocalDateKey } from "../utils/date";
+import { formatTailoredMaterialsMessage, generateTailoredMaterials } from "../documentTailoring";
 import { getConversation, getOrCreateUserForChat, saveCandidateProfile, saveSearchSettingsFromOnboarding, setConversationState, startConversation } from "./db";
 import { runJobSearchForUser } from "./jobSearch";
 import { planTextStep } from "./onboarding";
@@ -82,6 +83,7 @@ async function runInitialSearch(chatId: string, userId: number): Promise<void> {
     }
     await sendPlainMessage(chatId, `Found it — ${outcome.imported} matching role${outcome.imported === 1 ? "" : "s"}, ${outcome.shortlisted} made today's shortlist:`);
     const shortlist = await listShortlist(userId, getLocalDateKey("America/Toronto"));
+    const profile = await getProfile(userId);
     for (const item of shortlist) {
       if (!item.job.originalApplyUrl) continue;
       await sendOriginalLinkReviewCard({
@@ -94,10 +96,27 @@ async function runInitialSearch(chatId: string, userId: number): Promise<void> {
         sourceName: item.job.sourceName,
         originalApplyUrl: item.job.originalApplyUrl,
       });
+      if (profile) await sendTailoredMaterials(chatId, profile, item.job, item.scorecard.rationale);
     }
   } catch (error) {
     console.error("[TelegramBot] Initial job search failed", error);
     await sendPlainMessage(chatId, "I ran into an error searching just now — your profile and preferences are saved, and I'll retry later.");
+  }
+}
+
+async function sendTailoredMaterials(
+  chatId: string,
+  profile: NonNullable<Awaited<ReturnType<typeof getProfile>>>,
+  job: { title: string; employer: string; description: string },
+  scoreRationale: string
+): Promise<void> {
+  try {
+    const materials = await generateTailoredMaterials({ profile, job, scoreRationale });
+    await sendPlainMessage(chatId, formatTailoredMaterialsMessage(job, materials));
+  } catch (error) {
+    console.error("[TelegramBot] Tailored-materials generation failed", error);
+    // Non-fatal: the job link was already sent, so the user can still apply
+    // manually even if the tailoring step fails.
   }
 }
 

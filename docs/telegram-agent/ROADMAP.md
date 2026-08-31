@@ -128,11 +128,15 @@ in the logs, no other errors.
 
 - [ ] Run Phase 4's results through the generalized `scoreJob` (Phase 3) automatically, no manual import step
 
-## Phase 6 — Tailored resume + cover letter per job
+## Phase 6 — Tailored resume + cover letter per job ✅ done, verified live
 
-- [ ] New `server/documentTailoring.ts`: `invokeLLM` call producing tailored resume bullets + cover letter per scored job
-- [ ] Ground generation strictly in parsed résumé facts (extend the existing `scoringGuardrails` no-hallucination pattern from `server/db.ts`)
-- [ ] Deliver the tailored materials to the user via Telegram for review
+- [x] `server/documentTailoring.ts`: `generateTailoredMaterials()` calls `invokeLLM` with a strict JSON-schema response (`resumeHighlights[]`, `coverLetter`, `gapsToMention[]`) to produce tailored materials per scored job.
+- [x] Grounded strictly in the candidate's real parsed profile — the system prompt forbids inventing licensure/certifications/experience not in the profile and requires unmet requirements to go in `gapsToMention` rather than being glossed over, extending the same guardrail philosophy already in `server/db.ts`'s seed data and Phase 2's résumé-parsing prompt.
+- [x] Wired into `server/telegramBot/handler.ts`'s `runInitialSearch`: right after each shortlisted job's link card, it fetches the candidate profile once and sends tailored materials for that job as a follow-up Telegram message (`formatTailoredMaterialsMessage`).
+- [x] Verified live against the real OpenRouter API with a realistic profile/job pair: resume highlights and cover letter were accurate, specific to the employer/title, and traced back to real profile facts with no invented claims.
+- [x] `pnpm check`/`test` (42 passed)/`build` all clean, including a new unit test for the pure message-formatting function.
+
+**Design note:** materials are generated and sent automatically for every shortlisted job right now — there's no "approve before I generate this" gate yet. That's intentional and matches the roadmap's own phase split: Phase 7 is specifically where the interactive approve/decline step gets built on top of this. Every message already ends with an explicit "nothing here is submitted automatically" reminder in the meantime.
 
 ## Phase 7 — Approval stays human-in-the-loop
 

@@ -192,7 +192,17 @@ export const appRouter = router({
           isDuplicate: z.boolean().optional(),
         })
       )
-      .query(({ input }) => scoreJob(input)),
+      .query(async ({ ctx, input }) => {
+        // Score against the caller's own configured target roles/location, the
+        // same context a real import would use — not a fixed industry default.
+        const { settings } = await getSettings(ctx.user.id);
+        return scoreJob({
+          ...input,
+          targetTitles: settings?.targetTitles,
+          targetCity: settings?.city,
+          targetRadiusKm: settings?.radiusKm,
+        });
+      }),
   }),
 });
 

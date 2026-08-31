@@ -171,6 +171,9 @@ export async function importVerifiedListingBatch(
         status: "active",
         skillMatches,
         seniorityMatch: listing.seniorityMatch,
+        targetTitles: settings[0].targetTitles,
+        targetCity: settings[0].city,
+        targetRadiusKm: settings[0].radiusKm,
       });
       await db
         .insert(jobs)

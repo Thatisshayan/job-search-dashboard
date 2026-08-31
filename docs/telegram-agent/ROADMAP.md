@@ -83,11 +83,22 @@ part of the container's own boot (`"start": "drizzle-kit migrate && node dist/in
 in `package.json`) rather than a separate release step. Revisit if a cleaner CI/CD
 release-phase mechanism becomes available.
 
-## Phase 3 — Generalize the candidate profile & scoring
+## Phase 3 — Generalize the candidate profile & scoring ✅ done
 
-- [ ] Résumé parsing produces a `candidateProfiles` row (via `invokeLLM` with a JSON-schema response format) instead of the hardcoded seed in `server/db.ts`
-- [ ] `server/scoring.ts`'s `exactTitles`/`relatedTitleTerms` become derived from the user's stated target roles instead of a fixed construction list
-- [ ] Location/commute logic (`isGtaLocation`) generalizes beyond the hardcoded GTA city list
+- [x] Résumé parsing produces a `candidateProfiles` row (via `invokeLLM` with a JSON-schema response format) instead of the hardcoded seed in `server/db.ts` — landed in Phase 2, confirmed working with a real resume during the live test
+- [x] `server/scoring.ts`'s hardcoded `exactTitles`/`relatedTitleTerms` replaced with `matchTitle()`, driven by the caller's `targetTitles` (from `searchSettings`). "Exact" = job title contains a target title; "related" = shares 2+ significant words (stopwords like "senior"/"assistant" excluded) with any single target title.
+- [x] Location/commute logic (`isGtaLocation`, hardcoded to ~15 GTA suburb names) replaced with `isWithinTargetRadius()`: prefers a real `locationKm` distance when available, otherwise a coarse city-name-segment text match against `targetCity` (compares only the part before the first comma, so "Ottawa, Ontario" doesn't false-match "Toronto, Ontario" on the shared province name — caught by a test, fixed).
+- [x] `verifiedListingImport.ts` and `routers.ts`'s `previewScore` both now pass the caller's real `searchSettings` (`targetTitles`/`city`/`radiusKm`) into `scoreJob` instead of relying on hardcoded defaults.
+- [x] `scoring.test.ts` rewritten: proves the engine scores a non-construction role (backend engineer) identically to a construction one, plus explicit tests for the radius-vs-text-fallback precedence and the province-name false-positive fix.
+
+**Known remaining gap, not in this phase's scope:** `findVerifiedSkillMatches` in
+`server/verifiedListingImport.ts` still matches resume skills against a hardcoded
+construction-specific regex pattern list (`verifiedSkillPatterns`). This means
+`resumeSkillMatch` scoring is still construction-biased even though title/location
+matching is now generic. Generalizing this properly likely needs an LLM-based
+skill-match step (compare the parsed `candidateProfiles.skills` against a job
+description) rather than a regex list — worth its own phase/decision rather than a
+quick fix bolted onto this one.
 
 ## Phase 4 — Real job discovery via legitimate APIs
 

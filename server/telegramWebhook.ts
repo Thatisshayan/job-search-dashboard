@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
-import { processTelegramApprovalCallback } from "./applicationService";
+import { prepareGreenhouseAutoSubmitConfirmation, processGreenhouseConfirmationCallback, processTelegramApprovalCallback } from "./applicationService";
+import { isGreenhouseApplyUrl } from "./autoApply/greenhouse";
 import { answerTelegramCallback, isValidTelegramWebhookSecret, markApprovalCardResolved, sendFinalBrowserReviewCard } from "./telegram";
 import { advanceOnboardingStep, handleIncomingMessage } from "./telegramBot/handler";
 import { getConversation } from "./telegramBot/db";
@@ -45,31 +46,68 @@ export function registerTelegramWebhook(app: Express) {
       return;
     }
 
+    const chatId = String(callback.message.chat.id);
+    const data = String(callback.data);
+
+    // Phase 10 / DECISIONS.md D5: the second, separately-worded
+    // CONFIRM/DECLINE tap on a Greenhouse dry-run screenshot. Kept as a
+    // distinct callback prefix (v1confirm.) so it can never be confused with
+    // or replay the original Approve/Decline callback below.
+    if (data.startsWith("v1confirm.")) {
+      try {
+        const outcome = await processGreenhouseConfirmationCallback({ callbackId: String(callback.id), chatId, data });
+        await answerTelegramCallback(String(callback.id), outcome.text);
+        res.status(200).json({ ok: true });
+      } catch {
+        res.status(500).json({ ok: false });
+      }
+      return;
+    }
+
     try {
       const outcome = await processTelegramApprovalCallback({
         callbackId: String(callback.id),
-        chatId: String(callback.message.chat.id),
-        data: String(callback.data),
+        chatId,
+        data,
       });
       await answerTelegramCallback(String(callback.id), outcome.text);
       if (outcome.state !== "ignored" && outcome.telegramMessageId) {
-        await markApprovalCardResolved(String(callback.message.chat.id), outcome.telegramMessageId, outcome.text);
+        await markApprovalCardResolved(chatId, outcome.telegramMessageId, outcome.text);
       }
       if (outcome.state === "ready_for_final_confirmation" && outcome.originalApplyUrl) {
-        try {
-          await sendFinalBrowserReviewCard({
-            chatId: String(callback.message.chat.id),
-            title: outcome.jobTitle,
-            employer: outcome.employer,
-            originalApplyUrl: outcome.originalApplyUrl,
-          });
-        } catch (error) {
-          console.error("Telegram browser-review follow-up could not be delivered", error);
+        // Phase 10: a Greenhouse-hosted job gets an automated fill +
+        // screenshot + a second explicit CONFIRM step instead of just a
+        // link — see prepareGreenhouseAutoSubmitConfirmation. Every other
+        // job keeps exactly the original D2 manual-link behavior below.
+        let autoApplyStarted = false;
+        if (isGreenhouseApplyUrl(outcome.originalApplyUrl)) {
+          try {
+            const autoApplyResult = await prepareGreenhouseAutoSubmitConfirmation(outcome.userId, outcome.jobId);
+            autoApplyStarted = autoApplyResult.ok;
+            if (!autoApplyResult.ok) {
+              console.error(`[TelegramBot] Greenhouse auto-apply setup declined for job ${outcome.jobId}: ${autoApplyResult.reason}`);
+            }
+          } catch (error) {
+            console.error(`[TelegramBot] Greenhouse auto-apply setup failed for job ${outcome.jobId}`, error);
+          }
         }
-        // Tailored materials are generated only now, on approval — not for
-        // every shortlisted job up front (Phase 7: human-in-the-loop before
-        // spending LLM calls on jobs the user didn't ask about).
-        await sendTailoredMaterialsForJob(String(callback.message.chat.id), outcome.userId, outcome.jobId);
+
+        if (!autoApplyStarted) {
+          try {
+            await sendFinalBrowserReviewCard({
+              chatId,
+              title: outcome.jobTitle,
+              employer: outcome.employer,
+              originalApplyUrl: outcome.originalApplyUrl,
+            });
+          } catch (error) {
+            console.error("Telegram browser-review follow-up could not be delivered", error);
+          }
+          // Tailored materials are generated only now, on approval — not for
+          // every shortlisted job up front (Phase 7: human-in-the-loop before
+          // spending LLM calls on jobs the user didn't ask about).
+          await sendTailoredMaterialsForJob(chatId, outcome.userId, outcome.jobId);
+        }
       }
       res.status(200).json({ ok: true });
     } catch {

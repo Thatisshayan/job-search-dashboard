@@ -162,3 +162,89 @@ handful of real users outside the founder want this. Recommendation: prove
 retention and outcome quality (did a shortlisted, tailored application
 actually get more responses?) with a small group before treating this as a
 SaaS decision rather than a personal-tool decision.
+
+## D5 — Structured-ATS auto-submission: revising D2's scope (2026-08-31)
+
+**Chosen, explicitly, after the open question above was raised and answered:**
+build real automated submission, but **only** for jobs hosted on a small set
+of standardized ATS platforms (starting with Greenhouse), and **only** as
+automating the mechanical *how* of submission — not removing the human
+decision of *whether* to apply. The existing Approve tap (D2's original
+guardrail) still gates everything. What's new is a second, explicit,
+separately-worded confirmation immediately before the actual irreversible
+submit, shown alongside a screenshot of the filled-but-unsubmitted form:
+
+```
+Approve (existing) -> bot fills the real Greenhouse form + uploads the
+tailored resume PDF, does NOT click submit -> sends a screenshot of the
+filled form + "Reply CONFIRM to submit for real, or DECLINE to abort" ->
+only on CONFIRM does it click the real submit button.
+```
+
+This does not reverse D2's core reasoning (silent, consequential failure
+modes deserve a human check) — it adds automation to the *filling* step,
+which was always the safe, reversible part, while keeping a human check
+immediately before the one truly irreversible action. Every job not hosted
+on a supported ATS platform keeps the exact D2 behavior unchanged (link
+handed to the human to submit manually).
+
+**Why this wasn't just built directly on the original "go ahead" ask:**
+the previous open-questions entry above was explicit that reopening D2 is
+the user's call, and it was then made explicitly, with two further specifics
+confirmed directly: (1) the field-mapping-mistake risk is real enough to
+warrant the extra screenshot+confirm step rather than one-tap full autonomy,
+and (2) Greenhouse first, not Lever or both, to prove the pattern on the
+more standardized of the two before expanding.
+
+**Real, load-bearing technical constraint, stated plainly:** neither
+Greenhouse nor Lever exposes a public API for a third party to submit an
+application on a candidate's behalf. The only mechanism is browser
+automation against the same public HTML apply pages a human would use
+(Playwright driving a real Chromium instance: navigate, fill fields by
+matching common Greenhouse field names/ids, upload the resume PDF via
+`setInputFiles`, screenshot, and — only after CONFIRM — click the real
+submit button). This is meaningfully more fragile and harder to test safely
+than everything built so far in this project:
+
+- There is no sandbox environment for Greenhouse's real boards — every true
+  end-to-end test (past the dry-run/screenshot stage) submits a real
+  application to a real employer for a real posting. The dry-run/screenshot
+  step exists specifically so the *first* live check doesn't have to be a
+  real submission.
+- Custom screening questions vary per employer and can't all be mapped
+  automatically — unmappable questions must be surfaced to the user in the
+  screenshot/confirm message rather than silently left blank or guessed.
+- Some Greenhouse boards front their apply form with CAPTCHA/bot-detection
+  (Cloudflare Turnstile and similar) that this approach cannot solve; those
+  postings should be detected and gracefully fall back to D2's manual-link
+  behavior rather than failing silently.
+- Running headless Chromium in the Railway container is untested — it's a
+  meaningfully bigger, slower build than every dependency added so far
+  (browser binary download, possibly missing system libraries Railway's
+  build image doesn't include by default). This may need its own follow-up
+  fix once actually deployed, the same way the migration-on-boot workaround
+  emerged from Phase 2's live test rather than being predictable in advance.
+
+**Rejected: Lever or both platforms from the start.** Greenhouse's public
+apply-page markup is more standardized across different employers' boards;
+proving the pattern once before expanding it reduces the chance of building
+the wrong abstraction against two platforms' quirks simultaneously.
+
+**Rejected: no extra confirmation, Approve alone submits.** Considered
+because it's what "autonomous" most literally means, but rejected because a
+bad field mapping or an unmappable custom question would then reach a real
+employer with nobody having seen the filled form first — exactly the
+"silent, consequential failure" mode D2 was originally written to avoid.
+The screenshot+CONFIRM step keeps that check in place while still
+automating the tedious part.
+
+**Noted fallback, not adopted:** if plain Playwright+Chromium gets blocked
+by a Greenhouse board's bot-detection, an anti-detection browser fork
+(e.g. [Camoufox](https://github.com/daijro/camoufox)) is a known option —
+flagged by the user as "not that we have to use them, but in case." Not
+adopted as the default because deliberately evading bot-detection is a
+further escalation in posture beyond "automate what a human would click,"
+and deserves its own explicit decision if plain Chromium proves insufficient
+rather than being reached for preemptively.
+
+See [ROADMAP.md](./ROADMAP.md) Phase 10 for implementation status.

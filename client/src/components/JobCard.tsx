@@ -35,6 +35,7 @@ type ApplicationStatus =
   | "awaiting_telegram_approval"
   | "declined"
   | "ready_for_final_confirmation"
+  | "ready_for_auto_submit_confirmation"
   | "submitted"
   | "not_pursuing"
   | "expired";
@@ -83,6 +84,7 @@ const applicationStatusLabels: Record<ApplicationStatus, string> = {
   awaiting_telegram_approval: "Awaiting Telegram approval",
   declined: "Declined",
   ready_for_final_confirmation: "Ready — final confirmation needed",
+  ready_for_auto_submit_confirmation: "Filled — awaiting submit confirmation",
   submitted: "Submitted",
   not_pursuing: "Not pursuing",
   expired: "Expired",

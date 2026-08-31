@@ -29,11 +29,14 @@ const PROFILE_JSON_SCHEMA = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["displayName", "headline", "location", "summary", "skills", "experience", "education"],
+    required: ["displayName", "headline", "location", "email", "phone", "summary", "skills", "experience", "education"],
     properties: {
       displayName: { type: "string" },
       headline: { type: "string" },
       location: { type: "string" },
+      // Nullable — see drizzle/schema.ts's candidateProfiles.email/.phone comment.
+      email: { type: ["string", "null"] },
+      phone: { type: ["string", "null"] },
       summary: { type: "string" },
       skills: {
         type: "array",
@@ -87,6 +90,7 @@ const PROFILE_JSON_SCHEMA = {
 const SYSTEM_PROMPT = `You extract structured candidate profile data from resume text.
 Only include facts that are stated or directly evidenced in the resume text.
 Never invent licensure, work authorization, certifications, employers, titles, or dates that are not present.
+Extract the candidate's contact email and phone number verbatim if the resume states them; use null for either if not present — never invent or guess a contact detail.
 If a field cannot be determined from the text, use an empty string, empty array, empty object, or null (for numbers like a graduation year) as appropriate — do not guess.`;
 
 /**

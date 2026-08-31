@@ -53,6 +53,8 @@ export type ParsedResumeProfile = {
   displayName: string;
   headline: string;
   location: string;
+  email: string | null;
+  phone: string | null;
   summary: string;
   skills: Record<string, string[]>;
   experience: Array<Record<string, unknown>>;
@@ -68,6 +70,8 @@ export async function saveCandidateProfile(userId: number, profile: ParsedResume
     displayName: profile.displayName,
     headline: profile.headline,
     location: profile.location,
+    email: profile.email,
+    phone: profile.phone,
     summary: profile.summary,
     skills: profile.skills,
     experience: profile.experience,

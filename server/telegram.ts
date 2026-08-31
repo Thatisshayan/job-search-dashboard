@@ -37,17 +37,24 @@ export function hashApprovalNonce(nonce: string) {
   return crypto.createHash("sha256").update(nonce).digest("hex");
 }
 
-export function resolveSingleUseApproval(input: {
+export function resolveSingleUseApproval<TApproved extends string = "ready_for_final_confirmation", TDeclined extends string = "declined">(input: {
   currentStatus: string;
   storedNonceHash: string | null;
   expiresAt: Date | null;
   nonce: string;
   decision: ApprovalDecision;
-}) {
-  if (input.currentStatus !== "awaiting_telegram_approval") return null;
+  /** Defaults preserve the original Approve/Decline card's transition. */
+  expectedStatus?: string;
+  approvedStatus?: TApproved;
+  declinedStatus?: TDeclined;
+}): TApproved | TDeclined | null {
+  const expectedStatus = input.expectedStatus ?? "awaiting_telegram_approval";
+  const approvedStatus = (input.approvedStatus ?? "ready_for_final_confirmation") as TApproved;
+  const declinedStatus = (input.declinedStatus ?? "declined") as TDeclined;
+  if (input.currentStatus !== expectedStatus) return null;
   if (!input.expiresAt || input.expiresAt.getTime() < Date.now()) return null;
   if (!input.storedNonceHash || input.storedNonceHash !== hashApprovalNonce(input.nonce)) return null;
-  return input.decision === "approve" ? "ready_for_final_confirmation" : "declined";
+  return input.decision === "approve" ? approvedStatus : declinedStatus;
 }
 
 export function createApprovalCallback(applicationId: number, decision: ApprovalDecision, nonce: string) {
@@ -191,6 +198,22 @@ export async function downloadTelegramFile(fileId: string): Promise<Buffer> {
  * chat attachment. This is a multipart/form-data upload, not a JSON body, so
  * it can't go through `telegramApi()` like every other call in this file.
  */
+/**
+ * Sends a freshly generated image (e.g. a filled-form screenshot) inline in
+ * the chat, same multipart-upload mechanics as `sendDocumentBuffer` but
+ * using Telegram's `sendPhoto` so it renders as a preview instead of a
+ * downloadable file.
+ */
+export async function sendPhotoBuffer(input: { chatId: string; filename: string; buffer: Buffer; caption?: string }): Promise<void> {
+  const form = new FormData();
+  form.set("chat_id", input.chatId);
+  if (input.caption) form.set("caption", input.caption);
+  form.set("photo", new Blob([new Uint8Array(input.buffer)]), input.filename);
+  const response = await fetch(`https://api.telegram.org/bot${getBotToken()}/sendPhoto`, { method: "POST", body: form });
+  const body = (await response.json()) as TelegramEnvelope<unknown>;
+  if (!response.ok || !body.ok) throw new Error(`Telegram sendPhoto failed: ${body.description ?? "unknown error"}`);
+}
+
 export async function sendDocumentBuffer(input: { chatId: string; filename: string; buffer: Buffer; caption?: string }): Promise<void> {
   const form = new FormData();
   form.set("chat_id", input.chatId);

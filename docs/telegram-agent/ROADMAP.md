@@ -220,6 +220,52 @@ that was designed but not built (recruiter-style adaptive onboarding).
 - [ ] A general Telegram bot command menu (`/status`, `/settings`, etc.) —
   noted as a nice-to-have, not built this pass.
 
+## Phase 10 — Structured-ATS auto-submission (Greenhouse pilot) 🚧 in progress
+
+Scope decided in [DECISIONS.md](./DECISIONS.md) D5, 2026-08-31, after an
+explicit request to reopen part of D2. Read D5 first — this section only
+tracks build status, not the reasoning.
+
+Confirmed design: Approve (existing) → bot fills the real Greenhouse apply
+form + uploads the tailored resume PDF via Playwright, **does not submit**
+→ sends a screenshot of the filled form and any unmappable custom questions
+→ user replies CONFIRM (submits for real) or DECLINE (aborts, nothing sent).
+Non-Greenhouse jobs are completely unaffected — they keep exactly today's
+manual-link behavior.
+
+- [ ] Add `playwright` (Chromium) as a dependency; confirm it installs and
+  runs headless in both this local dev environment and the Railway
+  container — the latter is unproven and may need its own follow-up fix,
+  same as the migration-on-boot workaround that came out of Phase 2's live
+  test.
+- [ ] `server/autoApply/greenhouse.ts`: detect a Greenhouse-hosted apply URL
+  (`boards.greenhouse.io` / `job-boards.greenhouse.io`), map common fields
+  (name, email, phone, resume upload) from the candidate profile, screenshot
+  the filled-but-unsubmitted form, and separately report any custom
+  questions it couldn't map.
+- [ ] New `applications.status` value(s) and a second signed, single-use
+  callback (same nonce/replay-protection pattern as the existing Approve
+  callback) for the CONFIRM/DECLINE step, so this doesn't weaken the
+  existing anti-replay guarantees.
+- [ ] Wire into `applicationService.ts`/`telegramWebhook.ts`: on Approve,
+  if the job's `originalApplyUrl` matches a supported Greenhouse pattern,
+  branch into the new fill→screenshot→confirm flow instead of
+  `sendFinalBrowserReviewCard`. Otherwise, unchanged.
+- [ ] Detect CAPTCHA/bot-detection on the target page and fall back
+  gracefully to the manual-link flow rather than failing silently.
+- [ ] Tests: field-mapping logic tested against fixture HTML (no live
+  network calls in the test suite) — the same "pure logic vs. I/O" split
+  used everywhere else in this codebase.
+
+**How this gets verified live, and why it's different from every prior
+phase:** every previous phase's "live-verify" step was safe to redo freely.
+This one isn't — past the dry-run/screenshot stage, a true end-to-end check
+means a real application reaching a real employer for a real posting, which
+cannot be undone or repeated casually. Verification here is staged:
+first confirm the dry-run/screenshot step works correctly (safe, repeatable,
+no real submission), and only do a real CONFIRM against an actual posting
+the user is genuinely willing to apply to.
+
 ## Phase 9 — Retire or shrink the web dashboard
 
 - [ ] Decide: keep `client/` as a thin read-only admin/debug view, or remove it once the bot covers the full loop

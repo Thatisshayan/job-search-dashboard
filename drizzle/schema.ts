@@ -31,6 +31,12 @@ export const candidateProfiles = mysqlTable(
     displayName: varchar("displayName", { length: 160 }).notNull(),
     headline: varchar("headline", { length: 180 }).notNull(),
     location: varchar("location", { length: 180 }).notNull(),
+    // Nullable: not every resume states an email/phone explicitly, and this
+    // must never be guessed (same "don't invent facts" discipline as
+    // education.year). Required at auto-submit time (Phase 10) since a real
+    // application form needs contact info; the manual-link flow doesn't.
+    email: varchar("email", { length: 320 }),
+    phone: varchar("phone", { length: 40 }),
     summary: text("summary").notNull(),
     skills: json("skills").$type<Record<string, string[]>>().notNull(),
     experience: json("experience").$type<Array<Record<string, unknown>>>().notNull(),
@@ -233,6 +239,7 @@ export const applications = mysqlTable(
       "awaiting_telegram_approval",
       "declined",
       "ready_for_final_confirmation",
+      "ready_for_auto_submit_confirmation",
       "submitted",
       "not_pursuing",
       "expired",

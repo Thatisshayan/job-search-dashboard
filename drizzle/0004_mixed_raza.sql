@@ -1,0 +1,3 @@
+ALTER TABLE `applications` MODIFY COLUMN `status` enum('drafting','awaiting_telegram_approval','declined','ready_for_final_confirmation','ready_for_auto_submit_confirmation','submitted','not_pursuing','expired') NOT NULL DEFAULT 'drafting';--> statement-breakpoint
+ALTER TABLE `candidate_profiles` ADD `email` varchar(320);--> statement-breakpoint
+ALTER TABLE `candidate_profiles` ADD `phone` varchar(40);

@@ -92,3 +92,73 @@ tailored-document generation vs. any future conversational routing. Phase 1
 added a `DEFAULT_OPENROUTER_MODEL` constant (`openai/gpt-4o-mini`) as a
 placeholder so `invokeLLM` always sends a valid `model` field (OpenRouter
 requires one); this should be revisited per use case in Phase 2/6.
+
+## Open questions raised 2026-08-31, not yet decided
+
+These came up directly after Phase 7/8 live verification. Recorded here
+so they don't get lost, but **none of them change D1–D4** — they're
+explicitly flagged as open rather than acted on unilaterally, because each
+one either reopens a "non-negotiable" guardrail or is a real scope/cost
+increase.
+
+### Revisiting D2 (human-in-the-loop) — autonomous submission
+
+The direct question was asked: "where is the autonomous applying?" To be
+explicit about where things stand: **D2 is still in effect.** The bot
+prepares everything (scored match, tailored resume + cover letter PDFs,
+signed Approve/Decline card) and the final submission is still always a
+human clicking through to the employer's own site. This was chosen
+*deliberately* earlier in this project after an explicit risk pushback
+(fragile generic form-automation, ToS exposure on employer sites, silent
+failure modes with real consequences — ATS spam, a hallucinated cover-letter
+claim reaching a real employer, duplicate submissions) and the user chose to
+scale back from "fully autonomous" to "human final click" at that time.
+
+Reopening it is the user's call to make explicitly, not something to slide
+back in as a side effect of an unrelated feature request. If revisited, the
+smallest-risk middle ground already flagged in D2 is auto-submission scoped
+to a handful of script-friendly ATS platforms (Greenhouse/Lever/Workable)
+rather than arbitrary employer sites — still a real scope increase, with its
+own new failure modes (wrong-field mapping, ATS-side rate limiting/blocking)
+that would need their own design pass before being built.
+
+### Tool integrations (Zapier / Composio / AgentMail / similar)
+
+Important distinction that came up: these are tools available to *Claude
+Code* (the assistant building this project) inside this development
+session — they are **not** available to the deployed Telegram bot at
+runtime. The bot is a separate, already-running service on Railway; giving
+it "AgentMail" or "Zapier" capability means writing new server code that
+calls those services' own HTTP APIs directly from `server/`, the same way
+`server/jobSearch/adzuna.ts` calls Adzuna's API today. It is not a
+configuration flip.
+
+Not pursued yet because none of them have a concrete use case attached —
+e.g. AgentMail could plausibly let the bot manage a real inbox to send
+applications by email (useful for employers whose "apply" flow *is* an email
+address), but that only matters once a real employer with an email-only
+apply flow shows up in practice. Revisit once a specific job/task needs one
+of these, rather than integrating speculatively.
+
+### Is this whole product idea sound as a SaaS?
+
+Distinct from "is the code SaaS-ready" (an engineering checklist — see
+Phase 9). The underlying product question is whether "AI resume-tailoring +
+human-approved job applications over Telegram" is a good SaaS to build at
+all. Worth a real answer, not just an engineering gap list:
+
+The core loop (discover → score → tailor → human-approve) is a genuinely
+useful wedge — the tailoring quality already proven live is the hard part
+most competitors skip. The honest risks for a SaaS specifically: (1) legal
+exposure scales with users — one person self-serving their own job search
+under D1/D2's guardrails is very different from operating this as a service
+for strangers, especially around Adzuna's terms (a paid/commercial tier may
+be required past its free tier) and OpenRouter usage costs per user; (2)
+distribution is the actual hard problem here, not the tech — job-search
+tools are a crowded, low-trust category; (3) Telegram-only limits reach
+compared to a web/email-based competitor. None of these are blockers, but
+none of them get easier by writing more code before validating that a
+handful of real users outside the founder want this. Recommendation: prove
+retention and outcome quality (did a shortlisted, tailored application
+actually get more responses?) with a small group before treating this as a
+SaaS decision rather than a personal-tool decision.

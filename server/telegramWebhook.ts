@@ -1,7 +1,8 @@
 import type { Express, Request, Response } from "express";
 import { processTelegramApprovalCallback } from "./applicationService";
 import { answerTelegramCallback, isValidTelegramWebhookSecret, markApprovalCardResolved, sendFinalBrowserReviewCard } from "./telegram";
-import { handleIncomingMessage } from "./telegramBot/handler";
+import { advanceOnboardingStep, handleIncomingMessage } from "./telegramBot/handler";
+import { getConversation } from "./telegramBot/db";
 import { sendTailoredMaterialsForJob } from "./telegramBot/tailoring";
 
 export function registerTelegramWebhook(app: Express) {
@@ -27,6 +28,23 @@ export function registerTelegramWebhook(app: Express) {
       res.status(200).json({ ok: true });
       return;
     }
+
+    const radiusMatch = /^radius:(\d+)$/.exec(String(callback.data));
+    if (radiusMatch) {
+      const chatId = String(callback.message.chat.id);
+      try {
+        const conversation = await getConversation(chatId);
+        if (conversation?.state === "awaiting_radius") {
+          await advanceOnboardingStep(chatId, conversation, radiusMatch[1]);
+        }
+        await answerTelegramCallback(String(callback.id), `${radiusMatch[1]} km`);
+      } catch (error) {
+        console.error("[TelegramBot] Failed to handle radius button tap", error);
+      }
+      res.status(200).json({ ok: true });
+      return;
+    }
+
     try {
       const outcome = await processTelegramApprovalCallback({
         callbackId: String(callback.id),

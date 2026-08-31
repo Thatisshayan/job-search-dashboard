@@ -180,12 +180,63 @@ connecting to the bot-first flow instead of being rebuilt.
 
 **Not yet live-tested** — needs a real day to pass with the scheduler running in production, at a `scheduledTime` a few minutes out, to confirm it actually fires and delivers the same shortlist + approval cards the on-demand path does. Same treatment every other phase got before being marked verified.
 
+## Phase 8b — UX tweaks from live-user feedback (2026-08-31) ✅ done
+
+Raised directly after Phase 7/8 went live. See
+[DECISIONS.md](./DECISIONS.md)'s "Open questions raised 2026-08-31" section
+for the items that were discussed but deliberately *not* built (autonomous
+submission, Zapier/Composio/AgentMail, SaaS-viability), and
+[ADAPTIVE_ONBOARDING_DESIGN.md](./ADAPTIVE_ONBOARDING_DESIGN.md) for the one
+that was designed but not built (recruiter-style adaptive onboarding).
+
+- [x] **Stop re-asking about already-decided jobs.** `telegramBot/notify.ts`'s
+  `runSearchAndNotify` now filters `listShortlist`'s results down to jobs
+  with no existing `applications` row before sending anything — a job that
+  stays posted across multiple days no longer gets a fresh approval card
+  every time the scheduler or an on-demand search runs. This was a real
+  correctness bug, not just a UX nice-to-have: previously the code re-sent
+  a card for every job on the shortlist unconditionally.
+- [x] **Shortlist overview PDF.** `documentTailoring.ts`'s new
+  `buildShortlistSummaryPdf()` sends a one-page PDF (rank, score, title,
+  employer, location, link) for the day's *new/undecided* jobs before the
+  individual Approve/Decline cards, so the user can scan everything at once
+  instead of only ever seeing one job at a time. Falls back to the old
+  plain-text summary if PDF generation fails for any reason.
+- [x] **Paste resume text, not just upload a file.** `handler.ts`'s resume
+  step now accepts a pasted text message (≥200 characters, to avoid
+  misfiring on short replies) in addition to a PDF/DOCX upload, reusing
+  `resumeParsing.ts`'s existing `parseResumeText` directly.
+- [x] **Radius as buttons.** The "what search radius?" onboarding step now
+  sends inline quick-pick buttons (25/50/75/100 km) via a new
+  `telegram.ts` `sendButtonMessage()` helper, alongside still accepting a
+  typed number. `telegramWebhook.ts` routes `radius:<n>` button taps through
+  the same `advanceOnboardingStep()` the text path uses (extracted from
+  `handler.ts` so both input methods can't drift apart).
+- [x] `pnpm check`/`test`/`build` all clean.
+
+**Not done, deliberately, per this pass's scope:**
+- [ ] Buttonizing target-titles/location — free-text entry doesn't reduce
+  to a fixed button set the way radius does; not attempted.
+- [ ] A general Telegram bot command menu (`/status`, `/settings`, etc.) —
+  noted as a nice-to-have, not built this pass.
+
 ## Phase 9 — Retire or shrink the web dashboard
 
 - [ ] Decide: keep `client/` as a thin read-only admin/debug view, or remove it once the bot covers the full loop
 - [ ] If removed: decide what (if anything) replaces `server/_core/vite.ts`'s static-serving role
 
 ---
+
+## Deliberately deferred, not gaps
+
+- **Multi-user rollout** — the schema and bot identity flow (`getOrCreateUserForChat`)
+  already support it per-user; D3 in [DECISIONS.md](./DECISIONS.md) is a
+  rollout-scoping choice, not a technical blocker. Revisit once single-user
+  is proven reliable.
+- **Autonomous submission** — D2 is unchanged and non-negotiable absent an
+  explicit, separate decision to revisit it. See DECISIONS.md's open
+  questions section for the full reasoning (asked and answered directly on
+  2026-08-31).
 
 ## Open questions to resolve before/during the phase they block
 

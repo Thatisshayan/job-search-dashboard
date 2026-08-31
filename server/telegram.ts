@@ -155,6 +155,21 @@ export async function sendPlainMessage(chatId: string, text: string) {
   return telegramApi<{ message_id: number }>("sendMessage", { chat_id: chatId, text });
 }
 
+export type InlineButton = { text: string; callback_data: string };
+
+/**
+ * Sends a message with an inline-keyboard button grid (each inner array is
+ * one row). Used for onboarding steps with a small fixed set of sensible
+ * choices (e.g. commute radius) so the user can tap instead of typing.
+ */
+export async function sendButtonMessage(chatId: string, text: string, rows: InlineButton[][]) {
+  return telegramApi<{ message_id: number }>("sendMessage", {
+    chat_id: chatId,
+    text,
+    reply_markup: { inline_keyboard: rows },
+  });
+}
+
 type TelegramFile = { file_id: string; file_path?: string; file_size?: number };
 
 /**

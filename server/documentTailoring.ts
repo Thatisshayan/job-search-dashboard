@@ -193,6 +193,42 @@ export async function buildTailoredResumePdf(profile: ProfileForTailoring, mater
   return bufferFromDoc(doc);
 }
 
+export type ShortlistSummaryRow = {
+  rank: number;
+  score: number;
+  title: string;
+  employer: string;
+  location: string;
+  originalApplyUrl: string | null;
+};
+
+/**
+ * A one-page overview of the whole day's shortlist, sent before the
+ * individual per-job approval cards, so the candidate can scan everything
+ * at once instead of only ever seeing one job at a time.
+ */
+export async function buildShortlistSummaryPdf(input: { candidateName: string; dateKey: string; rows: ShortlistSummaryRow[] }): Promise<Buffer> {
+  const doc = newPdfDoc();
+
+  doc.fontSize(18).font("Helvetica-Bold").text(`Job shortlist — ${input.dateKey}`);
+  doc.fontSize(11).font("Helvetica").fillColor("#444").text(input.candidateName || "");
+  doc.moveDown();
+  doc.fontSize(10).fillColor("#666").text("Approve/Decline buttons for each of these follow as separate messages below.");
+  doc.moveDown();
+
+  input.rows.forEach(row => {
+    doc.fontSize(12).font("Helvetica-Bold").fillColor("#000").text(`${row.rank}. ${row.title} — ${row.score}/100`);
+    doc.fontSize(11).font("Helvetica").fillColor("#333").text(`${row.employer} · ${row.location}`);
+    if (row.originalApplyUrl) {
+      doc.fontSize(10).fillColor("#0645AD").text(row.originalApplyUrl, { link: row.originalApplyUrl, underline: true });
+    }
+    doc.fillColor("#000");
+    doc.moveDown(0.7);
+  });
+
+  return bufferFromDoc(doc);
+}
+
 export async function buildCoverLetterPdf(profile: ProfileForTailoring, job: { title: string; employer: string }, materials: TailoredMaterials): Promise<Buffer> {
   const doc = newPdfDoc();
   const today = new Intl.DateTimeFormat("en-CA", { dateStyle: "long" }).format(new Date());

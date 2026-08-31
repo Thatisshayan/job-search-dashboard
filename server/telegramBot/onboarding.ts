@@ -51,7 +51,7 @@ export function planTextStep(state: OnboardingState, text: string, context: Reco
       ok: true,
       nextState: "idle",
       context: { targetTitles, city, radiusKm },
-      reply: `You're set. I'll match you against: ${targetTitles.join(", ")}, near ${city} (within ${radiusKm} km).\n\nSearching for matching roles now — one moment…\n\nAfter this, I'll also check automatically once a day and message you here if anything new turns up.`,
+      reply: `You're set. I'll match you against: ${targetTitles.join(", ")}, near ${city} (within ${radiusKm} km).\n\nSearching for matching roles now — one moment…\n\nAfter this, I'll also check automatically once a day and message you here if anything new turns up.\n\nTip: if there's a specific company you want tracked closely, send /watch <company> (e.g. /watch acme, or paste their careers page link) and I'll include their own postings too.`,
     };
   }
 

@@ -280,25 +280,46 @@ fully built, tested, and deployed, but currently unreachable in production.
 Not a bug in the Greenhouse code itself; a gap in what URL the job-discovery
 pipeline hands it.
 
-Options on the table, none decided yet:
-1. Resolve the real employer URL by fetching and parsing Adzuna's landing-page
-   HTML for the outbound apply link — this is scraping Adzuna's *website*
-   (not their documented API), a different and more fragile mechanism than
-   a data field, and reopens the exact fragility/ToS concern D1 was written
-   to avoid; worth checking Adzuna's terms before attempting.
-2. Accept the limitation as a known, documented gap for now — the code is
-   correct and ready, just dormant until discovery can supply real URLs.
-3. Add a second job-discovery path specifically to feed Phase 10 that does
-   expose real employer URLs, separate from Adzuna's role as primary
-   discovery.
+**Resolved: option 3, built.** Option 1 (parse Adzuna's landing-page HTML
+for the outbound link) was investigated and rejected — Adzuna's actual
+click-through endpoint (`adzuna.ca/land/ad/{id}`, the one that would reveal
+the real employer URL) returns `403` even with realistic browser headers,
+and `robots.txt` is blocked the same way. This isn't ambiguous ToS
+language; it's active bot-defense on the exact endpoint needed, and Adzuna
+is a partner whose API access this project depends on for all of Phase 4 —
+working around their own site's protections risks that relationship for a
+worse reason than it's worth. See DECISIONS.md's update note for the full
+reasoning.
 
-- [ ] Once real employer URLs are reachable (whichever option above), a
-  real dry-run test against an actual Greenhouse posting — needs a live
-  shortlisted job with a `boards.greenhouse.io`/`job-boards.greenhouse.io`
-  apply URL to exercise `isGreenhouseApplyUrl()`'s branch in
-  `telegramWebhook.ts` for real.
-- [ ] Once the dry-run/screenshot step is confirmed correct, a real CONFIRM
-  against a posting the user is genuinely willing to apply to.
+Built instead: `server/jobSearch/greenhouseBoard.ts` — a second, narrower
+discovery source using Greenhouse's own public, documented, unauthenticated
+per-company API (`https://developers.greenhouse.io/job-board.html`), which
+returns real, directly-usable `absolute_url` apply links. Confirmed live
+against several real company boards (Stripe, Airbnb, Discord, Robinhood)
+before building.
+
+- [x] `greenhouseBoard.ts`: `extractGreenhouseBoardToken()` (accepts a bare
+  token or a full board URL), `fetchGreenhouseBoardMeta()`, and
+  `searchGreenhouseBoardJobs()` + `greenhouseBoardJobToVerifiedListing()`
+  (handles Greenhouse's double-HTML-escaped `content` field — confirmed
+  live against Discord's real board).
+- [x] `telegramBot/db.ts`: `registerGreenhouseWatch()`/`disableGreenhouseWatch()`/
+  `listGreenhouseWatches()` — reuses the existing `sourceConfigs` table
+  (`kind: "employer"`, name `Greenhouse:<token>`), no schema change needed.
+- [x] `telegramBot/watch.ts` + `handler.ts`: new bot commands `/watch <company>`,
+  `/unwatch <company>`, `/watching` — work in any conversation state, not
+  just during onboarding. Mentioned in the onboarding completion message.
+- [x] `telegramBot/jobSearch.ts`'s `runJobSearchForUser()` now runs Adzuna
+  (if configured) and every watched Greenhouse board, importing each as its
+  own batch through the same existing scoring/shortlist pipeline — no
+  changes needed to `verifiedListingImport.ts`.
+- [x] Unit tests for the pure mapping/token-extraction logic
+  (`greenhouseBoard.test.ts`), following the same "pure logic vs. I/O" split
+  used everywhere else in this codebase.
+- [ ] `pnpm check`/`test`/`build` — pending as of this write-up, see commit.
+- [ ] Not yet live-tested: a real user running `/watch <company>` against a
+  real board, confirming a real Greenhouse-hosted job actually reaches the
+  shortlist and triggers Phase 10's auto-submit branch end to end.
 
 **How this gets verified live, and why it's different from every prior
 phase:** every previous phase's "live-verify" step was safe to redo freely.

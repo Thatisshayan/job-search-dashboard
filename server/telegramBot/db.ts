@@ -127,3 +127,52 @@ export async function ensureSourceEnabled(userId: number, sourceName: string) {
   }
   await db.insert(sourceConfigs).values({ userId, name: sourceName, kind: "licensed", enabled: true, lastStatus: "Auto-registered for bot-driven search" });
 }
+
+/**
+ * Second discovery source (Phase 10 follow-up, DECISIONS.md D5's update
+ * note): a user-registered "watch this company's Greenhouse board"
+ * source. `sourceConfigs.name` holds the same `Greenhouse:<token>` value
+ * `greenhouseBoardSourceName()` produces, so `importVerifiedListingBatch`'s
+ * existing name-based lookup works unchanged for this source too.
+ */
+export async function registerGreenhouseWatch(userId: number, sourceName: string, boardToken: string, companyName: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const existing = (
+    await db.select().from(sourceConfigs).where(and(eq(sourceConfigs.userId, userId), eq(sourceConfigs.name, sourceName))).limit(1)
+  )[0];
+  const values = {
+    userId,
+    name: sourceName,
+    kind: "employer" as const,
+    baseUrl: `https://boards-api.greenhouse.io/v1/boards/${boardToken}`,
+    enabled: true,
+    lastStatus: `Watching ${companyName}'s Greenhouse board`,
+  };
+  if (existing) {
+    await db.update(sourceConfigs).set(values).where(eq(sourceConfigs.id, existing.id));
+    return;
+  }
+  await db.insert(sourceConfigs).values(values);
+}
+
+export async function disableGreenhouseWatch(userId: number, sourceName: string): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const existing = (
+    await db.select().from(sourceConfigs).where(and(eq(sourceConfigs.userId, userId), eq(sourceConfigs.name, sourceName))).limit(1)
+  )[0];
+  if (!existing) return false;
+  await db.update(sourceConfigs).set({ enabled: false }).where(eq(sourceConfigs.id, existing.id));
+  return true;
+}
+
+export async function listGreenhouseWatches(userId: number): Promise<Array<{ name: string; lastStatus: string | null }>> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const rows = await db
+    .select({ name: sourceConfigs.name, lastStatus: sourceConfigs.lastStatus })
+    .from(sourceConfigs)
+    .where(and(eq(sourceConfigs.userId, userId), eq(sourceConfigs.kind, "employer"), eq(sourceConfigs.enabled, true)));
+  return rows.filter(row => row.name.startsWith("Greenhouse:"));
+}

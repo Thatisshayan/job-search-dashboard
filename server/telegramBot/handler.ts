@@ -3,6 +3,7 @@ import { getConversation, getOrCreateUserForChat, saveCandidateProfile, saveSear
 import { runSearchAndNotify } from "./notify";
 import { planTextStep } from "./onboarding";
 import { downloadAndParseResume, isSupportedResumeMime, parseResumeText } from "./resumeParsing";
+import { handleUnwatchCommand, handleWatchCommand, handleWatchingCommand } from "./watch";
 
 type BotConversation = NonNullable<Awaited<ReturnType<typeof getConversation>>>;
 
@@ -27,6 +28,16 @@ export async function handleIncomingMessage(message: TelegramIncomingMessage): P
     const user = await getOrCreateUserForChat(chatId, message.chat.username ?? "");
     await startConversation(user.id, chatId);
     await sendPlainMessage(chatId, WELCOME_TEXT);
+    return;
+  }
+
+  const watchCommand = message.text ? /^\/(watch|unwatch|watching)(?:@\S+)?(?:\s+(.*))?$/.exec(message.text.trim()) : null;
+  if (watchCommand) {
+    const user = await getOrCreateUserForChat(chatId, message.chat.username ?? "");
+    const [, command, argument] = watchCommand;
+    if (command === "watch") await handleWatchCommand(chatId, user.id, argument ?? "");
+    else if (command === "unwatch") await handleUnwatchCommand(chatId, user.id, argument ?? "");
+    else await handleWatchingCommand(chatId, user.id);
     return;
   }
 

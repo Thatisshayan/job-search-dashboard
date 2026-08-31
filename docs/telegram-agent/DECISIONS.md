@@ -263,4 +263,36 @@ tends to read as evidence of intent rather than a defense. `isGreenhouseApplyUrl
 remains a hard allowlist, not a placeholder to be loosened later without a
 new, explicit, separately-reasoned decision the same weight as D1/D5.
 
+**Update: the URL-resolution gap, and why "option 1" was investigated and
+rejected in favor of "option 3" (2026-08-31).** Live-verifying Phase 10
+surfaced that `job.originalApplyUrl` was *always* Adzuna's own
+`redirect_url` — never the employer's real page — so `isGreenhouseApplyUrl()`
+could never match a real, Adzuna-discovered job. Auto-submit was fully
+built but unreachable in practice.
+
+Two remediation paths were on the table: (1) resolve the real employer URL
+by fetching/parsing Adzuna's own landing-page HTML, or (3) add a second
+discovery source that exposes real URLs directly. (1) was tested first and
+rejected: Adzuna's actual outbound click-through endpoint
+(`adzuna.ca/land/ad/{id}`, the one link that would reveal the real employer
+URL) returns `403` to automated requests even with realistic browser
+headers, and their `robots.txt` is blocked the same way — this is active,
+deliberate bot-defense on the exact endpoint needed, not ambiguous ToS
+language. Getting past it would require full-browser session automation
+against a *partner's* protections — the same category of action already
+declined above for other job boards, made worse here because Adzuna is who
+this project depends on for all of Phase 4's discovery; getting flagged
+risks losing that API access entirely, not just one failed request.
+
+Chose (3) instead: `server/jobSearch/greenhouseBoard.ts` uses Greenhouse's
+own public, documented, unauthenticated per-company job-board API
+(https://developers.greenhouse.io/job-board.html) — sanctioned by the
+platform that hosts the data, returning real `absolute_url` apply links
+directly, no resolution or scraping needed. Confirmed live against several
+real companies' boards (Stripe, Airbnb, Discord, Robinhood) before
+building. Users opt a specific company in via a new `/watch <company>` bot
+command; this is a narrower, per-company source alongside Adzuna's broad
+title/location search, not a replacement for it. See ROADMAP.md Phase 10
+for build status.
+
 See [ROADMAP.md](./ROADMAP.md) Phase 10 for implementation status.

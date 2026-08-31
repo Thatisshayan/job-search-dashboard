@@ -100,7 +100,7 @@ skill-match step (compare the parsed `candidateProfiles.skills` against a job
 description) rather than a regex list — worth its own phase/decision rather than a
 quick fix bolted onto this one.
 
-## Phase 4 — Real job discovery via legitimate APIs ✅ done (search itself not yet live-tested with a real Adzuna key)
+## Phase 4 — Real job discovery via legitimate APIs ✅ done and verified live
 
 - [x] Confirmed Adzuna: free, no card required, covers Canada (`ca`) and 17 other countries, "hundreds of calls/day" free tier — verified against their docs and public sources, not assumed. See commit for sources.
 - [x] `server/jobSearch/adzuna.ts` — `searchAdzunaJobs()` (calls `/v1/api/jobs/{country}/search/1`, `full_time=1` pre-filter) and `adzunaJobToVerifiedListing()` (maps to the exact shape `importVerifiedListingBatch` expects, rejecting part-time/too-short-description/no-URL results before they'd hit that function's own validation).
@@ -110,9 +110,16 @@ quick fix bolted onto this one.
 
 **Two honesty notes captured in code comments** (`adzuna.ts`): Adzuna's `redirect_url` is an aggregator-hosted redirect, not literally the employer's own domain (still leads to the real application, standard for aggregators, but not identical to the old hand-picked-link model). And `seniorityMatch` defaults to `"partial"` for every result rather than being judged per listing — there's no per-job LLM comparison against the résumé in this phase, so it's deliberately conservative rather than guessing "strong".
 
-**Not yet done:**
-- [ ] Actually run this against a real `ADZUNA_APP_ID`/`ADZUNA_APP_KEY` and a live Telegram conversation — no key was available while building this phase. Needs the same live-test treatment Phases 1–2 got before this is genuinely "proven," not just unit-tested.
-- [ ] The "user forwards a link" fallback from `DECISIONS.md` D1 — deferred; Adzuna coverage should be tried first.
+**Live end-to-end test completed 2026-08-31**, on the real Railway deployment, with
+a real Adzuna key: `/start` → resume upload → target titles "Construction
+Coordinator" etc. → Toronto → radius → the bot searched immediately and sent back
+3 real, live construction-coordinator job cards in Toronto. `notifyOwner`'s already-
+fixed graceful degradation (Phase 1) fired exactly as designed (logged, not fatal)
+since the notification proxy still isn't configured on this deployment — confirmed
+in the logs, no other errors.
+
+**Still open:**
+- [ ] The "user forwards a link" fallback from `DECISIONS.md` D1 — deferred; Adzuna coverage is confirmed working, so this is lower priority now.
 - [ ] Only one fixed country per deployment (`ADZUNA_DEFAULT_COUNTRY`, default `ca`) — there's no per-user country field yet, so a user searching outside that country would get no results silently. Worth adding to onboarding if this becomes a real need.
 
 ## Phase 5 — Score fetched listings automatically ✅ done (folded into Phase 4)

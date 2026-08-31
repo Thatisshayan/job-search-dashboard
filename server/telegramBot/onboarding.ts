@@ -51,7 +51,7 @@ export function planTextStep(state: OnboardingState, text: string, context: Reco
       ok: true,
       nextState: "idle",
       context: { targetTitles, city, radiusKm },
-      reply: `You're set. I'll match you against: ${targetTitles.join(", ")}, near ${city} (within ${radiusKm} km).\n\nHeads up: automatic daily searching isn't live yet — that's still being built. I'll let you know here as soon as it is.`,
+      reply: `You're set. I'll match you against: ${targetTitles.join(", ")}, near ${city} (within ${radiusKm} km).\n\nSearching for matching roles now — one moment…\n\n(Heads up: this runs on-demand for now. Automatic daily searching is still being built — I'll let you know here as soon as it is.)`,
     };
   }
 

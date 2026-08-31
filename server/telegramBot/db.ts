@@ -1,5 +1,5 @@
-import { eq } from "drizzle-orm";
-import { botConversations, candidateProfiles, searchSettings, users } from "../../drizzle/schema";
+import { and, eq } from "drizzle-orm";
+import { botConversations, candidateProfiles, searchSettings, sourceConfigs, users } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { bindTelegramConnection } from "../applicationService";
 
@@ -101,4 +101,25 @@ export async function saveSearchSettingsFromOnboarding(userId: number, settings:
     dailyNotificationEnabled: true,
   };
   await db.insert(searchSettings).values(values).onDuplicateKeyUpdate({ set: values });
+}
+
+/**
+ * importVerifiedListingBatch requires an existing, enabled sourceConfigs row
+ * matching the batch's sourceName — auto-provision one for a bot user the
+ * first time an automated search runs for them, rather than requiring a
+ * manual registration step they'd otherwise have no UI for (Owner Tools'
+ * "register a source" form is behind the website's OAuth login, which bot
+ * users never have).
+ */
+export async function ensureSourceEnabled(userId: number, sourceName: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const existing = (
+    await db.select().from(sourceConfigs).where(and(eq(sourceConfigs.userId, userId), eq(sourceConfigs.name, sourceName))).limit(1)
+  )[0];
+  if (existing) {
+    if (!existing.enabled) await db.update(sourceConfigs).set({ enabled: true }).where(eq(sourceConfigs.id, existing.id));
+    return;
+  }
+  await db.insert(sourceConfigs).values({ userId, name: sourceName, kind: "licensed", enabled: true, lastStatus: "Auto-registered for bot-driven search" });
 }

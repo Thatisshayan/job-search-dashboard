@@ -100,14 +100,24 @@ skill-match step (compare the parsed `candidateProfiles.skills` against a job
 description) rather than a regex list — worth its own phase/decision rather than a
 quick fix bolted onto this one.
 
-## Phase 4 — Real job discovery via legitimate APIs
+## Phase 4 — Real job discovery via legitimate APIs ✅ done (search itself not yet live-tested with a real Adzuna key)
 
-- [ ] Pick and confirm the specific aggregator API (Adzuna is the leading candidate — confirm free-tier limits are workable before committing)
-- [ ] New `server/jobSearch/<provider>.ts` client, producing `VerifiedListing`-shaped output (`server/verifiedListingImport.ts`)
-- [ ] Wire it to run against each user's target roles/locations
-- [ ] Decide on the "user forwards a link" fallback from `DECISIONS.md` D1 — build now or defer?
+- [x] Confirmed Adzuna: free, no card required, covers Canada (`ca`) and 17 other countries, "hundreds of calls/day" free tier — verified against their docs and public sources, not assumed. See commit for sources.
+- [x] `server/jobSearch/adzuna.ts` — `searchAdzunaJobs()` (calls `/v1/api/jobs/{country}/search/1`, `full_time=1` pre-filter) and `adzunaJobToVerifiedListing()` (maps to the exact shape `importVerifiedListingBatch` expects, rejecting part-time/too-short-description/no-URL results before they'd hit that function's own validation).
+- [x] `server/telegramBot/jobSearch.ts`'s `runJobSearchForUser()` — queries Adzuna once per configured target title, dedupes by `sourceExternalId` across titles, auto-provisions an "Adzuna" `sourceConfigs` row for the user (there's no website UI for a bot user to do this themselves — see Phase 6/7 note below), then calls the existing `importVerifiedListingBatch`.
+- [x] Wired into `server/telegramBot/handler.ts`: the moment onboarding finishes (radius answered), it runs this search immediately and sends the shortlisted jobs back as Telegram cards (`sendOriginalLinkReviewCard`, already existed) — not a "check the dashboard" message, since **the website dashboard is single-tenant** (hardwired to one "public workspace" user) and would show the wrong person's data for any bot-onboarded user. This is a real architectural gap worth its own decision later, not something this phase tries to fix.
+- [x] `pnpm check`/`test`/`build` clean, including new unit tests for the pure Adzuna-mapping function (full-time filter, description-length filter, missing-URL rejection, placeholder fallbacks).
 
-## Phase 5 — Score fetched listings automatically
+**Two honesty notes captured in code comments** (`adzuna.ts`): Adzuna's `redirect_url` is an aggregator-hosted redirect, not literally the employer's own domain (still leads to the real application, standard for aggregators, but not identical to the old hand-picked-link model). And `seniorityMatch` defaults to `"partial"` for every result rather than being judged per listing — there's no per-job LLM comparison against the résumé in this phase, so it's deliberately conservative rather than guessing "strong".
+
+**Not yet done:**
+- [ ] Actually run this against a real `ADZUNA_APP_ID`/`ADZUNA_APP_KEY` and a live Telegram conversation — no key was available while building this phase. Needs the same live-test treatment Phases 1–2 got before this is genuinely "proven," not just unit-tested.
+- [ ] The "user forwards a link" fallback from `DECISIONS.md` D1 — deferred; Adzuna coverage should be tried first.
+- [ ] Only one fixed country per deployment (`ADZUNA_DEFAULT_COUNTRY`, default `ca`) — there's no per-user country field yet, so a user searching outside that country would get no results silently. Worth adding to onboarding if this becomes a real need.
+
+## Phase 5 — Score fetched listings automatically ✅ done (folded into Phase 4)
+
+`importVerifiedListingBatch` has always scored every listing it imports as part of the same call — there was never a separate "import" step followed by a distinct "scoring" step to build. Phase 4's `runJobSearchForUser` already goes through this exact function, so this phase's original goal was satisfied by Phase 4 rather than needing separate work.
 
 - [ ] Run Phase 4's results through the generalized `scoreJob` (Phase 3) automatically, no manual import step
 

@@ -11,6 +11,8 @@ export const ENV = {
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
   openRouterApiKey: process.env.OPENROUTER_API_KEY ?? "",
   openRouterBaseUrl: process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1",
+  adzunaAppId: process.env.ADZUNA_APP_ID ?? "",
+  adzunaAppKey: process.env.ADZUNA_APP_KEY ?? "",
 };
 
 const requiredEnvSchema = z.object({

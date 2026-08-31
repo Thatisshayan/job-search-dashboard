@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { processTelegramApprovalCallback } from "./applicationService";
 import { answerTelegramCallback, isValidTelegramWebhookSecret, markApprovalCardResolved, sendFinalBrowserReviewCard } from "./telegram";
+import { handleIncomingMessage } from "./telegramBot/handler";
 
 export function registerTelegramWebhook(app: Express) {
   app.post("/api/telegram/webhook", async (req: Request, res: Response) => {
@@ -8,6 +9,18 @@ export function registerTelegramWebhook(app: Express) {
       res.status(401).json({ ok: false });
       return;
     }
+
+    const message = req.body?.message;
+    if (message?.chat?.id) {
+      try {
+        await handleIncomingMessage(message);
+      } catch (error) {
+        console.error("[TelegramBot] Failed to handle incoming message", error);
+      }
+      res.status(200).json({ ok: true });
+      return;
+    }
+
     const callback = req.body?.callback_query;
     if (!callback?.id || !callback?.data || !callback?.message?.chat?.id) {
       res.status(200).json({ ok: true });

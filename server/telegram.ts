@@ -82,7 +82,7 @@ export async function setTelegramWebhook(url: string) {
   return telegramApi<boolean>("setWebhook", {
     url,
     secret_token: getTelegramWebhookSecret(),
-    allowed_updates: ["callback_query"],
+    allowed_updates: ["callback_query", "message"],
     drop_pending_updates: false,
   });
 }
@@ -149,6 +149,26 @@ export async function sendOriginalLinkReviewCard(input: {
       inline_keyboard: [[{ text: "Open original application", url: input.originalApplyUrl }]],
     },
   });
+}
+
+export async function sendPlainMessage(chatId: string, text: string) {
+  return telegramApi<{ message_id: number }>("sendMessage", { chat_id: chatId, text });
+}
+
+type TelegramFile = { file_id: string; file_path?: string; file_size?: number };
+
+/**
+ * Downloads a file the user sent (e.g. a resume) as raw bytes. Telegram
+ * requires two calls: `getFile` to resolve a `file_path`, then a plain GET
+ * against a URL that embeds the bot token — that GET isn't a Bot API method,
+ * so it can't go through `telegramApi()`.
+ */
+export async function downloadTelegramFile(fileId: string): Promise<Buffer> {
+  const file = await telegramApi<TelegramFile>("getFile", { file_id: fileId });
+  if (!file.file_path) throw new Error("Telegram did not return a file_path for this file");
+  const response = await fetch(`https://api.telegram.org/file/bot${getBotToken()}/${file.file_path}`);
+  if (!response.ok) throw new Error(`Failed to download Telegram file: ${response.status}`);
+  return Buffer.from(await response.arrayBuffer());
 }
 
 export async function answerTelegramCallback(callbackQueryId: string, text: string) {

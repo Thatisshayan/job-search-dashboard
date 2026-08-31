@@ -38,14 +38,26 @@ import('./server/_core/llm.ts').then(async ({ invokeLLM }) => {
 means the OpenRouter swap works; nothing in the app calls this yet, so this
 is purely a plumbing check.
 
-## Phase 2 — Telegram becomes the app
+## Phase 2 — Telegram becomes the app ✅ done and verified (except real Telegram send/download calls — no bot token available in this environment)
 
-- [ ] Extend `telegramWebhook.ts` to handle `message` updates, not just `callback_query`
-- [ ] `/start` command → onboarding flow begins
-- [ ] Résumé upload handling: Telegram `document` message → `getFile` → download → text extraction (PDF/DOCX)
-- [ ] Conversational collection of target roles / locations / preferences
-- [ ] New `botConversations` table (or equivalent) to track per-chat state — see `ARCHITECTURE.md`
-- [ ] Decide and document the exact conversation state machine (states, transitions) before writing the handler logic
+- [x] Conversation state machine decided and documented: `awaiting_resume` → `awaiting_target_titles` → `awaiting_location` → `awaiting_radius` → `idle`. Pure transition logic in `server/telegramBot/onboarding.ts` (`planTextStep`), unit-tested in `onboarding.test.ts`.
+- [x] New `bot_conversations` table added to `drizzle/schema.ts` (`chatId` unique, `userId`, `state`, `context` JSON) — **migration not yet generated**, see below.
+- [x] Chat→user identity resolution: `getOrCreateUserForChat` (`server/telegramBot/db.ts`) creates a `users` row keyed by a synthetic `telegram:<chatId>` openId on first `/start`, independent of the Manus OAuth login the website still uses, and pairs it via the existing `telegramConnections`/`bindTelegramConnection`.
+- [x] Extended `telegramWebhook.ts` to route `message` updates (not just `callback_query`) to `server/telegramBot/handler.ts`; added `"message"` to `setTelegramWebhook`'s `allowed_updates` (it only requested `callback_query` before — messages would never have reached the webhook otherwise).
+- [x] `/start` command → creates/resets the conversation, sends the welcome + résumé-upload prompt.
+- [x] Résumé upload handling: Telegram `document` message → `downloadTelegramFile` (new helper in `server/telegram.ts`, uses `getFile` + the token-embedded file URL) → text extraction via `pdf-parse` (PDF) or `mammoth` (DOCX) → `invokeLLM` with a strict JSON-schema response format → saved to `candidateProfiles`.
+  - **Verified live** against the real OpenRouter API with a sample resume — structured extraction and the skills array→`Record<string,string[]>` conversion both work correctly (see `resumeParsing.ts`'s `parseResumeText`).
+  - Skills are modeled as `{category, items}[]` rather than a `{[category]: items}` dictionary in the JSON schema — OpenAI-style strict structured outputs don't reliably support open-ended `additionalProperties`; this is converted back to the dictionary shape `candidateProfiles.skills` expects.
+- [x] Conversational collection of target roles / location / radius (`planTextStep`), finalizing into `searchSettings` via `saveSearchSettingsFromOnboarding`.
+
+**Verified in this pass** (local MySQL 8 container + real OpenRouter key):
+- [x] `pnpm db:generate && pnpm db:migrate` — `drizzle/0003_zippy_swarm.sql` created the `bot_conversations` table cleanly
+- [x] Full onboarding data flow exercised directly against a real DB: `getOrCreateUserForChat` → `startConversation` → `saveCandidateProfile` → `planTextStep` through all four states → `saveSearchSettingsFromOnboarding` — all correct
+- [x] `pnpm check` / `pnpm test` clean (33 passed, 5 correctly skipped live/integration tests)
+
+**Not verified — needs a real Telegram bot token** (none available in this dev environment):
+- [ ] `sendPlainMessage` / `downloadTelegramFile` against the real Telegram Bot API
+- [ ] A real end-to-end run: message a live bot, upload an actual resume file, and confirm the replies/flow feel right in the Telegram client itself
 
 ## Phase 3 — Generalize the candidate profile & scoring
 

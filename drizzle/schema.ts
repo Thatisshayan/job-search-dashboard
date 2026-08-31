@@ -200,6 +200,26 @@ export const telegramConnections = mysqlTable(
   table => [uniqueIndex("telegram_connections_user_unique").on(table.userId), uniqueIndex("telegram_connections_chat_unique").on(table.chatId)],
 );
 
+export const botConversations = mysqlTable(
+  "bot_conversations",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull(),
+    chatId: varchar("chatId", { length: 64 }).notNull(),
+    state: mysqlEnum("state", [
+      "awaiting_resume",
+      "awaiting_target_titles",
+      "awaiting_location",
+      "awaiting_radius",
+      "idle",
+    ]).notNull().default("awaiting_resume"),
+    context: json("context").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [uniqueIndex("bot_conversations_chat_unique").on(table.chatId)],
+);
+
 export const applications = mysqlTable(
   "applications",
   {
@@ -247,3 +267,4 @@ export type ShortlistEntry = typeof shortlistEntries.$inferSelect;
 export type JobAction = typeof jobActions.$inferSelect;
 export type TelegramConnection = typeof telegramConnections.$inferSelect;
 export type Application = typeof applications.$inferSelect;
+export type BotConversation = typeof botConversations.$inferSelect;

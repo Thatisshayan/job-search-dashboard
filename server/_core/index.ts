@@ -10,6 +10,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { registerTelegramWebhook } from "../telegramWebhook";
+import { startDailyScheduler } from "../scheduler";
 import { assertRequiredEnv } from "./env";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -93,6 +94,8 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
+
+  startDailyScheduler();
 }
 
 startServer().catch(console.error);

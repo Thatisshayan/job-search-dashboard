@@ -167,9 +167,18 @@ connecting to the bot-first flow instead of being rebuilt.
 
 **Live-verified on the real Railway deployment 2026-08-31**: sent `/start`, ran a fresh search, tapped Approve on one shortlisted job and Decline on another. Confirmed via `railway logs --http` (8 webhook POSTs, all `200`, two long-running ones matching job-search and PDF-generation timing) and `railway logs` (no errors besides the already-expected/caught `notifyOwner` warning) that the callback → tailoring hookup fires correctly. User confirmed both PDFs arrived for the approved job; nothing was generated for the declined one.
 
-## Phase 8 — Daily scheduler
+## Phase 8 — Daily scheduler ✅ done, not yet live-tested
 
-- [ ] Add a real cron/scheduler (evaluate `node-cron` vs. a lightweight interval check) driving discovery → score → tailor → notify once daily per user's `scheduledTime`
+- [x] `server/scheduler.ts`: an in-process `setInterval` (checks once a minute) — no new dependency, no external cron service needed for the current single-instance, single-user deployment. For each row in `search_settings` with `dailyNotificationEnabled`, it compares the user's current local time (via `Intl.DateTimeFormat` against their stored `timezone`) to their `scheduledTime`, and skips if a `job_runs` row already exists for today in that timezone (`alreadyRanToday`) — so a restart or a slow tick can't double-fire within the same day.
+- [x] Extracted the shared "search then message the chat" logic out of `telegramBot/handler.ts`'s old `runInitialSearch` into `telegramBot/notify.ts`'s `runSearchAndNotify(chatId, userId)` — used by both the immediate post-onboarding search and the scheduler, so the two paths can't drift.
+- [x] `telegramConnections` (already existed, `userId` → `chatId`, populated at `/start`) is how the scheduler resolves who to message — no new pairing step needed.
+- [x] Wired into boot: `startDailyScheduler()` called once from `server/_core/index.ts` after `server.listen`.
+- [x] `scheduler.test.ts` covers the pure time-matching function (`currentHHMM`) across timezones ahead of/behind UTC, including a day-rollover case (Tokyo). The DB-dependent parts (`alreadyRanToday`, the per-row loop) aren't unit tested — consistent with how the rest of this codebase treats `getDb()`-touching logic (verified live instead, see below).
+- [x] `pnpm check`/`test`/`build` all clean.
+
+**Known limitation, accepted for now:** a single in-process timer only works correctly with exactly one running server instance. Railway currently runs one instance of this service, so this is fine, but it would silently multi-fire (or under-fire, if a scale-down races a tick) if ever scaled horizontally. Worth revisiting (e.g. a DB-level "claim" row, or a real job queue) before adding a second instance.
+
+**Not yet live-tested** — needs a real day to pass with the scheduler running in production, at a `scheduledTime` a few minutes out, to confirm it actually fires and delivers the same shortlist + approval cards the on-demand path does. Same treatment every other phase got before being marked verified.
 
 ## Phase 9 — Retire or shrink the web dashboard
 

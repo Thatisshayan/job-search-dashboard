@@ -188,6 +188,8 @@ export async function processTelegramApprovalCallback(input: { callbackId: strin
   return {
     state: targetStatus,
     applicationId: application.id,
+    userId: application.userId,
+    jobId: application.jobId,
     telegramMessageId: application.telegramMessageId,
     originalApplyUrl: targetStatus === "ready_for_final_confirmation" ? job.originalApplyUrl : null,
     jobTitle: job.title,

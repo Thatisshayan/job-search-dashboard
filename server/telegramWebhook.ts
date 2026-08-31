@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { processTelegramApprovalCallback } from "./applicationService";
 import { answerTelegramCallback, isValidTelegramWebhookSecret, markApprovalCardResolved, sendFinalBrowserReviewCard } from "./telegram";
 import { handleIncomingMessage } from "./telegramBot/handler";
+import { sendTailoredMaterialsForJob } from "./telegramBot/tailoring";
 
 export function registerTelegramWebhook(app: Express) {
   app.post("/api/telegram/webhook", async (req: Request, res: Response) => {
@@ -47,6 +48,10 @@ export function registerTelegramWebhook(app: Express) {
         } catch (error) {
           console.error("Telegram browser-review follow-up could not be delivered", error);
         }
+        // Tailored materials are generated only now, on approval — not for
+        // every shortlisted job up front (Phase 7: human-in-the-loop before
+        // spending LLM calls on jobs the user didn't ask about).
+        await sendTailoredMaterialsForJob(String(callback.message.chat.id), outcome.userId, outcome.jobId);
       }
       res.status(200).json({ ok: true });
     } catch {

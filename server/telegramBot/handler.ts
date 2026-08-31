@@ -1,7 +1,7 @@
-import { sendDocumentBuffer, sendOriginalLinkReviewCard, sendPlainMessage } from "../telegram";
-import { getProfile, listShortlist } from "../db";
+import { sendPlainMessage } from "../telegram";
+import { listShortlist } from "../db";
 import { getLocalDateKey } from "../utils/date";
-import { buildCoverLetterPdf, buildTailoredResumePdf, generateTailoredMaterials } from "../documentTailoring";
+import { prepareApplicationForTelegram } from "../applicationService";
 import { getConversation, getOrCreateUserForChat, saveCandidateProfile, saveSearchSettingsFromOnboarding, setConversationState, startConversation } from "./db";
 import { runJobSearchForUser } from "./jobSearch";
 import { planTextStep } from "./onboarding";
@@ -81,55 +81,22 @@ async function runInitialSearch(chatId: string, userId: number): Promise<void> {
       await sendPlainMessage(chatId, `Found ${outcome.imported} role${outcome.imported === 1 ? "" : "s"}, but none scored high enough for today's shortlist yet.`);
       return;
     }
-    await sendPlainMessage(chatId, `Found it — ${outcome.imported} matching role${outcome.imported === 1 ? "" : "s"}, ${outcome.shortlisted} made today's shortlist:`);
+    await sendPlainMessage(
+      chatId,
+      `Found it — ${outcome.imported} matching role${outcome.imported === 1 ? "" : "s"}, ${outcome.shortlisted} made today's shortlist. Review each one below and tap Approve to get a tailored resume + cover letter for it, or Decline to skip.`
+    );
     const shortlist = await listShortlist(userId, getLocalDateKey("America/Toronto"));
-    const profile = await getProfile(userId);
     for (const item of shortlist) {
       if (!item.job.originalApplyUrl) continue;
-      await sendOriginalLinkReviewCard({
-        chatId,
-        rank: item.entry.rank,
-        score: item.scorecard.totalScore,
-        title: item.job.title,
-        employer: item.job.employer,
-        location: item.job.location,
-        sourceName: item.job.sourceName,
-        originalApplyUrl: item.job.originalApplyUrl,
-      });
-      if (profile) await sendTailoredMaterials(chatId, profile, item.job, item.scorecard.rationale);
+      try {
+        await prepareApplicationForTelegram(userId, item.job.id);
+      } catch (error) {
+        console.error(`[TelegramBot] Could not prepare approval card for job ${item.job.id}`, error);
+      }
     }
   } catch (error) {
     console.error("[TelegramBot] Initial job search failed", error);
     await sendPlainMessage(chatId, "I ran into an error searching just now — your profile and preferences are saved, and I'll retry later.");
-  }
-}
-
-function slug(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 40) || "job";
-}
-
-async function sendTailoredMaterials(
-  chatId: string,
-  profile: NonNullable<Awaited<ReturnType<typeof getProfile>>>,
-  job: { title: string; employer: string; description: string },
-  scoreRationale: string
-): Promise<void> {
-  try {
-    const materials = await generateTailoredMaterials({ profile, job, scoreRationale });
-    const [resumePdf, coverLetterPdf] = await Promise.all([
-      buildTailoredResumePdf(profile, materials),
-      buildCoverLetterPdf(profile, job, materials),
-    ]);
-    const filenameBase = slug(job.employer);
-    await sendDocumentBuffer({ chatId, filename: `resume-${filenameBase}.pdf`, buffer: resumePdf, caption: `Tailored resume — ${job.title} at ${job.employer}` });
-    await sendDocumentBuffer({ chatId, filename: `cover-letter-${filenameBase}.pdf`, buffer: coverLetterPdf, caption: `Cover letter — ${job.title} at ${job.employer}` });
-    if (materials.gapsToMention.length) {
-      await sendPlainMessage(chatId, `Worth knowing before you apply to ${job.employer}:\n${materials.gapsToMention.map(item => `• ${item}`).join("\n")}`);
-    }
-  } catch (error) {
-    console.error("[TelegramBot] Tailored-materials generation failed", error);
-    // Non-fatal: the job link was already sent, so the user can still apply
-    // manually even if the tailoring step fails.
   }
 }
 

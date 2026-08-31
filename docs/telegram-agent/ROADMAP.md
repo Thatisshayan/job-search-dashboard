@@ -140,10 +140,32 @@ in the logs, no other errors.
 
 **Design note:** materials are generated and sent automatically for every shortlisted job right now — there's no "approve before I generate this" gate yet. That's intentional and matches the roadmap's own phase split: Phase 7 is specifically where the interactive approve/decline step gets built on top of this. Every message already ends with an explicit "nothing here is submitted automatically" reminder in the meantime.
 
-## Phase 7 — Approval stays human-in-the-loop
+## Phase 7 — Approval stays human-in-the-loop ✅ done
 
-- [ ] Extend the existing signed-callback approval (`server/telegram.ts`) to cover "approve these tailored materials"
-- [ ] Flow still ends at handing the user the original job link for their own manual final click — **do not remove this step** (see `OVERVIEW.md` guardrail / `DECISIONS.md` D2)
+Turns out most of this phase already existed — it was built for the original
+single-owner website flow (`prepareApplicationForTelegram` /
+`processTelegramApprovalCallback` / signed, single-use, replay-proof callbacks,
+already proven in `applicationReplay.integration.test.ts`) and just needed
+connecting to the bot-first flow instead of being rebuilt.
+
+- [x] `telegramBot/handler.ts`'s `runInitialSearch` no longer sends an
+  informational-only link card + auto-generated tailored materials for every
+  shortlisted job (that was Phase 6's interim behavior). It now calls the
+  existing `prepareApplicationForTelegram(userId, jobId)` per job, which sends
+  the same signed Approve/Decline card the website flow always used.
+- [x] `applicationService.ts`'s `processTelegramApprovalCallback` now also
+  returns `userId`/`jobId` (additive, non-breaking) so the webhook handler can
+  look up the right profile/job for tailoring after a decision.
+- [x] `telegramWebhook.ts`: on `ready_for_final_confirmation` (i.e. Approve),
+  it still sends the existing final-browser-review card with the original
+  apply link — **unchanged, per the non-negotiable guardrail in
+  `OVERVIEW.md`/`DECISIONS.md` D2** — and *now also* calls the new
+  `telegramBot/tailoring.ts`'s `sendTailoredMaterialsForJob()` to generate and
+  deliver the tailored PDFs at that point. On Decline, nothing is generated —
+  no LLM/PDF cost is spent on jobs the user didn't ask about.
+- [x] `pnpm check`/`test` (44 passed)/`build` all clean.
+
+**Not yet live-tested** — needs a real Telegram approve/decline click to confirm the callback → tailoring hookup actually fires correctly, same treatment every other phase got.
 
 ## Phase 8 — Daily scheduler
 

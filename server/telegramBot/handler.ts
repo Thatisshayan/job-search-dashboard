@@ -1,7 +1,7 @@
-import { sendOriginalLinkReviewCard, sendPlainMessage } from "../telegram";
+import { sendDocumentBuffer, sendOriginalLinkReviewCard, sendPlainMessage } from "../telegram";
 import { getProfile, listShortlist } from "../db";
 import { getLocalDateKey } from "../utils/date";
-import { formatTailoredMaterialsMessage, generateTailoredMaterials } from "../documentTailoring";
+import { buildCoverLetterPdf, buildTailoredResumePdf, generateTailoredMaterials } from "../documentTailoring";
 import { getConversation, getOrCreateUserForChat, saveCandidateProfile, saveSearchSettingsFromOnboarding, setConversationState, startConversation } from "./db";
 import { runJobSearchForUser } from "./jobSearch";
 import { planTextStep } from "./onboarding";
@@ -104,6 +104,10 @@ async function runInitialSearch(chatId: string, userId: number): Promise<void> {
   }
 }
 
+function slug(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 40) || "job";
+}
+
 async function sendTailoredMaterials(
   chatId: string,
   profile: NonNullable<Awaited<ReturnType<typeof getProfile>>>,
@@ -112,7 +116,16 @@ async function sendTailoredMaterials(
 ): Promise<void> {
   try {
     const materials = await generateTailoredMaterials({ profile, job, scoreRationale });
-    await sendPlainMessage(chatId, formatTailoredMaterialsMessage(job, materials));
+    const [resumePdf, coverLetterPdf] = await Promise.all([
+      buildTailoredResumePdf(profile, materials),
+      buildCoverLetterPdf(profile, job, materials),
+    ]);
+    const filenameBase = slug(job.employer);
+    await sendDocumentBuffer({ chatId, filename: `resume-${filenameBase}.pdf`, buffer: resumePdf, caption: `Tailored resume — ${job.title} at ${job.employer}` });
+    await sendDocumentBuffer({ chatId, filename: `cover-letter-${filenameBase}.pdf`, buffer: coverLetterPdf, caption: `Cover letter — ${job.title} at ${job.employer}` });
+    if (materials.gapsToMention.length) {
+      await sendPlainMessage(chatId, `Worth knowing before you apply to ${job.employer}:\n${materials.gapsToMention.map(item => `• ${item}`).join("\n")}`);
+    }
   } catch (error) {
     console.error("[TelegramBot] Tailored-materials generation failed", error);
     // Non-fatal: the job link was already sent, so the user can still apply

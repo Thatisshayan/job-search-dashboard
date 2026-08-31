@@ -171,6 +171,25 @@ export async function downloadTelegramFile(fileId: string): Promise<Buffer> {
   return Buffer.from(await response.arrayBuffer());
 }
 
+/**
+ * Sends a freshly generated file (not one already on Telegram's servers) as a
+ * chat attachment. This is a multipart/form-data upload, not a JSON body, so
+ * it can't go through `telegramApi()` like every other call in this file.
+ */
+export async function sendDocumentBuffer(input: { chatId: string; filename: string; buffer: Buffer; caption?: string }): Promise<void> {
+  const form = new FormData();
+  form.set("chat_id", input.chatId);
+  if (input.caption) form.set("caption", input.caption);
+  form.set("document", new Blob([new Uint8Array(input.buffer)]), input.filename);
+
+  const response = await fetch(`https://api.telegram.org/bot${getBotToken()}/sendDocument`, {
+    method: "POST",
+    body: form,
+  });
+  const body = (await response.json()) as TelegramEnvelope<unknown>;
+  if (!response.ok || !body.ok) throw new Error(`Telegram sendDocument failed: ${body.description ?? "unknown error"}`);
+}
+
 export async function answerTelegramCallback(callbackQueryId: string, text: string) {
   return telegramApi<boolean>("answerCallbackQuery", { callback_query_id: callbackQueryId, text, show_alert: false });
 }

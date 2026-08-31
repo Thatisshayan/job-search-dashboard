@@ -233,11 +233,15 @@ form + uploads the tailored resume PDF via Playwright, **does not submit**
 Non-Greenhouse jobs are completely unaffected — they keep exactly today's
 manual-link behavior.
 
-- [ ] Add `playwright` (Chromium) as a dependency; confirm it installs and
-  runs headless in both this local dev environment and the Railway
-  container — the latter is unproven and may need its own follow-up fix,
-  same as the migration-on-boot workaround that came out of Phase 2's live
-  test.
+- [x] Runs on Camoufox (`camoufox-js`, Apify's Playwright-compatible Node
+  port) rather than plain Chromium — swapped in after being flagged as a
+  better-documented fit for minimal Linux containers; see DECISIONS.md D5's
+  update note. Confirmed locally: `npx camoufox-js fetch` downloads cleanly
+  (~558MB total, meaningfully bigger than plain Chromium — a real
+  Railway build-time/size cost worth knowing going in) and a real
+  launch+navigate smoke test passes. **Still unproven on Railway itself** —
+  that's the next real unknown, same as the migration-on-boot workaround
+  that came out of Phase 2's live test.
 - [ ] `server/autoApply/greenhouse.ts`: detect a Greenhouse-hosted apply URL
   (`boards.greenhouse.io` / `job-boards.greenhouse.io`), map common fields
   (name, email, phone, resume upload) from the candidate profile, screenshot

@@ -238,13 +238,29 @@ employer with nobody having seen the filled form first — exactly the
 The screenshot+CONFIRM step keeps that check in place while still
 automating the tedious part.
 
-**Noted fallback, not adopted:** if plain Playwright+Chromium gets blocked
-by a Greenhouse board's bot-detection, an anti-detection browser fork
-(e.g. [Camoufox](https://github.com/daijro/camoufox)) is a known option —
-flagged by the user as "not that we have to use them, but in case." Not
-adopted as the default because deliberately evading bot-detection is a
-further escalation in posture beyond "automate what a human would click,"
-and deserves its own explicit decision if plain Chromium proves insufficient
-rather than being reached for preemptively.
+**Update: adopted as the browser engine, scope held at Greenhouse only.**
+Plain Playwright+Chromium's Railway compatibility was never verified before
+this was raised; switching to [Camoufox](https://camoufox.com) (via
+`camoufox-js`, Apify's Playwright-compatible Node port) was chosen instead
+of debating it further, since it returns a standard Playwright `Page` and
+needed only the browser-launch line changed in `greenhouse.ts` — not the
+field-mapping/fill/screenshot logic. This is an infra choice (which browser
+binary runs the automation), not a scope change: `isGreenhouseApplyUrl()`
+still gates every use of it to the same Greenhouse boards D5 already
+approved.
+
+**Explicitly declined: using Camoufox's anti-detection capability to expand
+to other job boards.** Asked directly, in the same spirit as "since we have
+better tooling, can we hit more sites now" — declined. Camoufox's
+fingerprint-spoofing exists specifically to defeat bot-detection systems
+that a site deployed *on purpose* to stop automated access; using it against
+a site like LinkedIn or Indeed is a materially different act than filling
+out Greenhouse's own public apply form, and reopens exactly what D1 already
+rejected (scraping/automating sites whose ToS forbid it, citing *hiQ Labs
+v. LinkedIn* and *Meta v. Bright Data*) — arguably with worse legal
+exposure, since deliberately circumventing a technical protection measure
+tends to read as evidence of intent rather than a defense. `isGreenhouseApplyUrl()`
+remains a hard allowlist, not a placeholder to be loosened later without a
+new, explicit, separately-reasoned decision the same weight as D1/D5.
 
 See [ROADMAP.md](./ROADMAP.md) Phase 10 for implementation status.

@@ -1,4 +1,4 @@
-import type { Page } from "playwright";
+import type { Page } from "playwright-core";
 
 /**
  * Automates filling (and, only when explicitly told to, submitting) a real
@@ -6,6 +6,13 @@ import type { Page } from "playwright";
  * for the full reasoning and safety model: this always runs in dry-run mode
  * first (fill + screenshot, no submit) so a human can review the filled
  * form before the one truly irreversible action happens.
+ *
+ * Runs on Camoufox (camoufox-js), not plain Chromium — chosen for its
+ * better-documented track record running in minimal Linux containers like
+ * Railway's. This is strictly a browser-engine choice: isGreenhouseApplyUrl()
+ * below is a hard allowlist and stays that way — see DECISIONS.md D5's
+ * "Explicitly declined" note on why this is not a general-purpose bypass
+ * for other job boards' bot-detection.
  *
  * Field selectors here are heuristic, covering both Greenhouse's classic
  * embed (boards.greenhouse.io) and its newer job-boards UI
@@ -89,8 +96,8 @@ export type GreenhouseRunResult = {
 };
 
 export async function runGreenhouseApplication(input: GreenhouseRunInput): Promise<GreenhouseRunResult> {
-  const { chromium } = await import("playwright");
-  const browser = await chromium.launch({ headless: true });
+  const { Camoufox } = await import("camoufox-js");
+  const browser = await Camoufox({ headless: true });
   try {
     const page = await browser.newPage();
     await page.goto(input.applyUrl, { waitUntil: "networkidle", timeout: 30_000 });

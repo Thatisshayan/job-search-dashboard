@@ -284,6 +284,28 @@ first confirm the dry-run/screenshot step works correctly (safe, repeatable,
 no real submission), and only do a real CONFIRM against an actual posting
 the user is genuinely willing to apply to.
 
+## Phase 11 — Document-quality improvements (noted, not built)
+
+Raised 2026-08-31 after researching `MadsLorentzen/ai-job-search` (39k-star
+Claude Code job-search workflow) for reusable ideas — see DECISIONS.md's
+open-questions section for the full comparison. Its architecture doesn't
+transfer (interactive CLI vs. our autonomous bot; Python/LaTeX vs. our
+Node/pdfkit; scrapes job portals, which conflicts with D1), but one specific
+technique is worth adopting:
+
+- [ ] **ATS-parseability check on generated PDFs.** Their `/apply` extracts
+  the *compiled* PDF's text layer and verifies it reads sanely to an ATS
+  parser (contact info present as real text, correct reading order, no
+  garbled glyphs) — because PDF generation can silently produce output that
+  looks right visually but extracts as garbage. We already depend on
+  `pdf-parse` (used today for resume intake in `resumeParsing.ts`); running
+  our own `buildTailoredResumePdf()` output back through it before sending
+  would catch that failure mode for near-zero new dependency cost. Not
+  built yet — small, well-scoped, good candidate for a quick follow-up.
+- [ ] **Drafter-reviewer second pass** on tailored materials (a critique
+  step before finalizing) — bigger cost (2x LLM calls per job), plausible
+  quality lift, not started.
+
 ## Phase 9 — Retire or shrink the web dashboard
 
 - [ ] Decide: keep `client/` as a thin read-only admin/debug view, or remove it once the bot covers the full loop

@@ -237,11 +237,15 @@ manual-link behavior.
   port) rather than plain Chromium — swapped in after being flagged as a
   better-documented fit for minimal Linux containers; see DECISIONS.md D5's
   update note. Confirmed locally: `npx camoufox-js fetch` downloads cleanly
-  (~558MB total, meaningfully bigger than plain Chromium — a real
-  Railway build-time/size cost worth knowing going in) and a real
-  launch+navigate smoke test passes. **Still unproven on Railway itself** —
-  that's the next real unknown, same as the migration-on-boot workaround
-  that came out of Phase 2's live test.
+  and a real launch+navigate smoke test passes.
+- [x] **Live-verified on Railway 2026-08-31**: the first deploy attempt
+  revealed the binary was never actually downloaded during the build (the
+  fetch step wasn't wired into `package.json`'s `build` script) — fixed by
+  appending `&& npx camoufox-js fetch` to `build`. Redeployed; the Railway
+  build log now shows the binary downloading during the build (663MB on
+  Linux — bigger than the 493MB Windows binary — plus a 65MB GeoIP database
+  re-downloaded on every build) and the image pushing successfully. Service
+  confirmed healthy (`200` on the deployed URL) after the fix.
 - [ ] `server/autoApply/greenhouse.ts`: detect a Greenhouse-hosted apply URL
   (`boards.greenhouse.io` / `job-boards.greenhouse.io`), map common fields
   (name, email, phone, resume upload) from the candidate profile, screenshot
@@ -260,6 +264,16 @@ manual-link behavior.
 - [ ] Tests: field-mapping logic tested against fixture HTML (no live
   network calls in the test suite) — the same "pure logic vs. I/O" split
   used everywhere else in this codebase.
+
+**Still open:**
+- [ ] A real dry-run test against an actual Greenhouse posting (Adzuna
+  results include Greenhouse-hosted listings sometimes, but this hasn't
+  been confirmed to actually trigger yet — needs a live shortlisted job
+  with a `boards.greenhouse.io`/`job-boards.greenhouse.io` apply URL to
+  exercise `isGreenhouseApplyUrl()`'s branch in `telegramWebhook.ts` for
+  real).
+- [ ] Once the dry-run/screenshot step is confirmed correct, a real CONFIRM
+  against a posting the user is genuinely willing to apply to.
 
 **How this gets verified live, and why it's different from every prior
 phase:** every previous phase's "live-verify" step was safe to redo freely.

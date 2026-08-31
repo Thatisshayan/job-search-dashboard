@@ -140,7 +140,7 @@ in the logs, no other errors.
 
 **Design note:** materials are generated and sent automatically for every shortlisted job right now — there's no "approve before I generate this" gate yet. That's intentional and matches the roadmap's own phase split: Phase 7 is specifically where the interactive approve/decline step gets built on top of this. Every message already ends with an explicit "nothing here is submitted automatically" reminder in the meantime.
 
-## Phase 7 — Approval stays human-in-the-loop ✅ done
+## Phase 7 — Approval stays human-in-the-loop ✅ done and verified live
 
 Turns out most of this phase already existed — it was built for the original
 single-owner website flow (`prepareApplicationForTelegram` /
@@ -165,7 +165,7 @@ connecting to the bot-first flow instead of being rebuilt.
   no LLM/PDF cost is spent on jobs the user didn't ask about.
 - [x] `pnpm check`/`test` (44 passed)/`build` all clean.
 
-**Not yet live-tested** — needs a real Telegram approve/decline click to confirm the callback → tailoring hookup actually fires correctly, same treatment every other phase got.
+**Live-verified on the real Railway deployment 2026-08-31**: sent `/start`, ran a fresh search, tapped Approve on one shortlisted job and Decline on another. Confirmed via `railway logs --http` (8 webhook POSTs, all `200`, two long-running ones matching job-search and PDF-generation timing) and `railway logs` (no errors besides the already-expected/caught `notifyOwner` warning) that the callback → tailoring hookup fires correctly. User confirmed both PDFs arrived for the approved job; nothing was generated for the declined one.
 
 ## Phase 8 — Daily scheduler
 

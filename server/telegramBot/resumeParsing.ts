@@ -71,7 +71,11 @@ const PROFILE_JSON_SCHEMA = {
           properties: {
             degree: { type: "string" },
             institution: { type: "string" },
-            year: { type: "number" },
+            // Nullable rather than omitted: strict JSON-schema mode requires every
+            // property to be listed in `required`, but a resume often doesn't state
+            // a graduation year — null lets the model say "not stated" instead of
+            // being forced to guess or default to something like 0.
+            year: { type: ["number", "null"] },
           },
         },
       },
@@ -83,7 +87,7 @@ const PROFILE_JSON_SCHEMA = {
 const SYSTEM_PROMPT = `You extract structured candidate profile data from resume text.
 Only include facts that are stated or directly evidenced in the resume text.
 Never invent licensure, work authorization, certifications, employers, titles, or dates that are not present.
-If a field cannot be determined from the text, use an empty string, empty array, or empty object as appropriate — do not guess.`;
+If a field cannot be determined from the text, use an empty string, empty array, empty object, or null (for numbers like a graduation year) as appropriate — do not guess.`;
 
 /**
  * Turns raw resume text into the structured shape `candidateProfiles` expects.

@@ -55,9 +55,33 @@ is purely a plumbing check.
 - [x] Full onboarding data flow exercised directly against a real DB: `getOrCreateUserForChat` → `startConversation` → `saveCandidateProfile` → `planTextStep` through all four states → `saveSearchSettingsFromOnboarding` — all correct
 - [x] `pnpm check` / `pnpm test` clean (33 passed, 5 correctly skipped live/integration tests)
 
-**Not verified — needs a real Telegram bot token** (none available in this dev environment):
-- [ ] `sendPlainMessage` / `downloadTelegramFile` against the real Telegram Bot API
-- [ ] A real end-to-end run: message a live bot, upload an actual resume file, and confirm the replies/flow feel right in the Telegram client itself
+**Live end-to-end test completed 2026-08-31** against a real Telegram bot (the
+production bot token) and, subsequently, the real deployed app on Railway (see
+[DEPLOYMENT.md](./DEPLOYMENT.md)). `/start` → resume upload → role/location/radius
+all worked correctly in the actual Telegram client, confirmed against the database
+both times. Three real bugs were found and fixed during this test:
+
+1. **`app.set("trust proxy", 1)` was missing** (`server/_core/index.ts`) — every real
+   deployment sits behind a reverse proxy (Railway, Vercel, Manus, the cloudflared
+   tunnel used for the first pass of this test), and without this Express can't read
+   `X-Forwarded-For`, so `express-rate-limit` logged `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR`
+   on every request. Fixed.
+2. **`notifyOwner` was unguarded** in `server/verifiedListingImport.ts` — it throws if
+   `BUILT_IN_FORGE_API_URL`/`KEY` (Manus's notification proxy) aren't configured, which
+   they intentionally aren't in this deployment. Since this call sits inside the very
+   first-request bootstrap path (`ensurePublicWorkspaceInitialized`), it broke *every*
+   request until fixed. Now wrapped in try/catch — a missing notification channel must
+   never break the shortlist-import path it's attached to.
+3. **Résumé education `year` schema issue** — `year: { type: "number" }` under strict
+   JSON-schema mode forced the model to invent `0` when a resume doesn't state a
+   graduation year. Changed to `type: ["number", "null"]`.
+
+Education year fix aside, this also surfaced a real production migration gap: Railway's
+MySQL is only reachable from the private network, and this CLI's SSH implementation
+failed host-key verification on Windows even after upgrading, so migrations run as
+part of the container's own boot (`"start": "drizzle-kit migrate && node dist/index.js"`
+in `package.json`) rather than a separate release step. Revisit if a cleaner CI/CD
+release-phase mechanism becomes available.
 
 ## Phase 3 — Generalize the candidate profile & scoring
 

@@ -41,6 +41,7 @@ since a bot with nothing to search is just a chatbot.
 - **[ROADMAP.md](./ROADMAP.md)** — the phase-by-phase todo list. Start here to see what's done and what's next.
 - **[DECISIONS.md](./DECISIONS.md)** — the calls made on job discovery, auto-apply scope, and multi-tenancy, including what was explicitly *rejected* and why.
 - **[ARCHITECTURE.md](./ARCHITECTURE.md)** — what gets reused from the existing codebase, what's new, and where things live.
+- **[DEPLOYMENT.md](./DEPLOYMENT.md)** — the live Railway deployment: how to redeploy, env vars, webhook management, known gaps.
 
 ## Non-negotiable guardrail
 

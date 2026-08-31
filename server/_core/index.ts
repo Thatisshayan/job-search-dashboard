@@ -35,6 +35,13 @@ async function startServer() {
   assertRequiredEnv();
 
   const app = express();
+  // Every real deployment target (Railway, Vercel, Manus, a Cloudflare tunnel for
+  // local testing) sits behind exactly one reverse proxy hop, which sets
+  // X-Forwarded-For/X-Forwarded-Proto. Without this, Express ignores those headers
+  // (req.ip stays the proxy's own address) and express-rate-limit logs a
+  // ERR_ERL_UNEXPECTED_X_FORWARDED_FOR warning on every request instead of actually
+  // rate-limiting per client.
+  app.set("trust proxy", 1);
   const server = createServer(app);
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));

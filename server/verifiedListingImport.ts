@@ -318,10 +318,18 @@ export async function importVerifiedListingBatch(
         .slice(0, 3)
         .map(item => `${item.totalScore}/100`)
         .join(", ");
-      await notifyOwner({
-        title: "Construction shortlist updated",
-        content: `${newJobIds.size} verified new role${newJobIds.size === 1 ? "" : "s"} were added to today’s private shortlist. Top new fit scores: ${newTopMatches || "available in the dashboard"}. Review each original posting before preparing an application.`,
-      });
+      // Best-effort: notifyOwner throws if the Manus notification proxy isn't
+      // configured (BUILT_IN_FORGE_API_URL/KEY), which this deployment
+      // intentionally doesn't set. A missing notification channel must never
+      // break the import/shortlist write path it's attached to.
+      try {
+        await notifyOwner({
+          title: "Construction shortlist updated",
+          content: `${newJobIds.size} verified new role${newJobIds.size === 1 ? "" : "s"} were added to today’s private shortlist. Top new fit scores: ${newTopMatches || "available in the dashboard"}. Review each original posting before preparing an application.`,
+        });
+      } catch (error) {
+        console.error("[verifiedListingImport] Owner notification could not be delivered", error);
+      }
     }
     return {
       runId,

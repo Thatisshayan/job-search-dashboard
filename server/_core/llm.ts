@@ -213,15 +213,18 @@ const normalizeToolChoice = (
 };
 
 const resolveApiUrl = () =>
-  ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-    ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
-    : "https://forge.manus.im/v1/chat/completions";
+  `${ENV.openRouterBaseUrl.replace(/\/$/, "")}/chat/completions`;
 
 const assertApiKey = () => {
-  if (!ENV.forgeApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
+  if (!ENV.openRouterApiKey) {
+    throw new Error("OPENROUTER_API_KEY is not configured");
   }
 };
+
+// OpenRouter rejects a request with no `model`, unlike some proxies that pick
+// a default server-side. Callers can pass this explicitly, or omit `model`
+// and rely on this fallback via `params.model ?? DEFAULT_OPENROUTER_MODEL`.
+export const DEFAULT_OPENROUTER_MODEL = "openai/gpt-4o-mini";
 
 const normalizeResponseFormat = ({
   responseFormat,
@@ -360,11 +363,8 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
 
   const payload: Record<string, unknown> = {
     messages: messages.map(normalizeMessage),
+    model: model ?? DEFAULT_OPENROUTER_MODEL,
   };
-
-  if (model) {
-    payload.model = model;
-  }
 
   if (tools && tools.length > 0) {
     payload.tools = tools;
@@ -405,7 +405,10 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${ENV.forgeApiKey}`,
+      authorization: `Bearer ${ENV.openRouterApiKey}`,
+      // Optional OpenRouter attribution headers (shown on their public rankings
+      // page); harmless to omit but cheap to set correctly.
+      "X-Title": "Job Search Dashboard",
     },
     body: JSON.stringify(payload),
   });
@@ -435,12 +438,10 @@ export type ModelsResponse = {
 export async function listLLMModels(): Promise<ModelsResponse> {
   assertApiKey();
 
-  const url = ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-    ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/models`
-    : "https://forge.manus.im/v1/models";
+  const url = `${ENV.openRouterBaseUrl.replace(/\/$/, "")}/models`;
 
   const response = await fetchWithBackoff(url, {
-    headers: { authorization: `Bearer ${ENV.forgeApiKey}` },
+    headers: { authorization: `Bearer ${ENV.openRouterApiKey}` },
   });
 
   if (!response.ok) {

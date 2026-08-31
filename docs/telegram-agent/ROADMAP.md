@@ -1,0 +1,93 @@
+# Roadmap / Todo
+
+Scope locked in by [DECISIONS.md](./DECISIONS.md): Telegram-native interface,
+OpenRouter for AI, legitimate job-search APIs (not scraping), human final
+click retained (no unsupervised auto-submit), single user for now.
+
+Update this file's checkboxes as work lands. If a phase's actual
+implementation diverges from what's written here, update the doc in the
+same change — this file should always reflect reality, not the original
+guess.
+
+## Phase 1 — Swap the LLM provider to OpenRouter ✅ done and verified
+
+- [x] Add `OPENROUTER_API_KEY` / `OPENROUTER_BASE_URL` to `server/_core/env.ts`
+- [x] Point `server/_core/llm.ts`'s `invokeLLM`/`listLLMModels` at OpenRouter instead of Manus's Forge proxy
+- [x] Add `DEFAULT_OPENROUTER_MODEL` fallback so every request sends a valid `model` (OpenRouter requires one; the old Forge proxy didn't)
+- [x] Document the new env vars in `.env.example` and `README.md`
+- [x] Get a real `OPENROUTER_API_KEY` and smoke-test `invokeLLM` end-to-end — confirmed working against `openai/gpt-4o-mini` on 2026-08-31
+
+**Not touched, intentionally:** `server/_core/storageProxy.ts`, `voiceTranscription.ts`,
+`notification.ts`, `map.ts`, `heartbeat.ts`, `imageGeneration.ts`, `dataApi.ts` —
+these are all separate, currently-unused Manus scaffold utilities. Decoupling
+them from Manus is a different, not-yet-scoped effort, not part of the AI
+provider swap.
+
+### How to verify Phase 1
+
+```bash
+export OPENROUTER_API_KEY=sk-or-...
+node -e "
+import('./server/_core/llm.ts').then(async ({ invokeLLM }) => {
+  const result = await invokeLLM({ messages: [{ role: 'user', content: 'Say OK.' }] });
+  console.log(result.choices[0].message.content);
+});
+"
+```
+(Adjust for how you run TS locally — e.g. via `tsx -e`.) A successful run
+means the OpenRouter swap works; nothing in the app calls this yet, so this
+is purely a plumbing check.
+
+## Phase 2 — Telegram becomes the app
+
+- [ ] Extend `telegramWebhook.ts` to handle `message` updates, not just `callback_query`
+- [ ] `/start` command → onboarding flow begins
+- [ ] Résumé upload handling: Telegram `document` message → `getFile` → download → text extraction (PDF/DOCX)
+- [ ] Conversational collection of target roles / locations / preferences
+- [ ] New `botConversations` table (or equivalent) to track per-chat state — see `ARCHITECTURE.md`
+- [ ] Decide and document the exact conversation state machine (states, transitions) before writing the handler logic
+
+## Phase 3 — Generalize the candidate profile & scoring
+
+- [ ] Résumé parsing produces a `candidateProfiles` row (via `invokeLLM` with a JSON-schema response format) instead of the hardcoded seed in `server/db.ts`
+- [ ] `server/scoring.ts`'s `exactTitles`/`relatedTitleTerms` become derived from the user's stated target roles instead of a fixed construction list
+- [ ] Location/commute logic (`isGtaLocation`) generalizes beyond the hardcoded GTA city list
+
+## Phase 4 — Real job discovery via legitimate APIs
+
+- [ ] Pick and confirm the specific aggregator API (Adzuna is the leading candidate — confirm free-tier limits are workable before committing)
+- [ ] New `server/jobSearch/<provider>.ts` client, producing `VerifiedListing`-shaped output (`server/verifiedListingImport.ts`)
+- [ ] Wire it to run against each user's target roles/locations
+- [ ] Decide on the "user forwards a link" fallback from `DECISIONS.md` D1 — build now or defer?
+
+## Phase 5 — Score fetched listings automatically
+
+- [ ] Run Phase 4's results through the generalized `scoreJob` (Phase 3) automatically, no manual import step
+
+## Phase 6 — Tailored resume + cover letter per job
+
+- [ ] New `server/documentTailoring.ts`: `invokeLLM` call producing tailored resume bullets + cover letter per scored job
+- [ ] Ground generation strictly in parsed résumé facts (extend the existing `scoringGuardrails` no-hallucination pattern from `server/db.ts`)
+- [ ] Deliver the tailored materials to the user via Telegram for review
+
+## Phase 7 — Approval stays human-in-the-loop
+
+- [ ] Extend the existing signed-callback approval (`server/telegram.ts`) to cover "approve these tailored materials"
+- [ ] Flow still ends at handing the user the original job link for their own manual final click — **do not remove this step** (see `OVERVIEW.md` guardrail / `DECISIONS.md` D2)
+
+## Phase 8 — Daily scheduler
+
+- [ ] Add a real cron/scheduler (evaluate `node-cron` vs. a lightweight interval check) driving discovery → score → tailor → notify once daily per user's `scheduledTime`
+
+## Phase 9 — Retire or shrink the web dashboard
+
+- [ ] Decide: keep `client/` as a thin read-only admin/debug view, or remove it once the bot covers the full loop
+- [ ] If removed: decide what (if anything) replaces `server/_core/vite.ts`'s static-serving role
+
+---
+
+## Open questions to resolve before/during the phase they block
+
+- **Phase 4:** exact job-search API and its rate/geographic limits — confirm before writing the client.
+- **Phase 6:** which OpenRouter model(s) for parsing vs. tailoring vs. any future routing — `DEFAULT_OPENROUTER_MODEL` is a placeholder, not a final choice.
+- **Phase 9:** whether the dashboard has any value once the bot is the primary interface, or if it should just go away.

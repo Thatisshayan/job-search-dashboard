@@ -130,7 +130,7 @@ export const BOT_COMMANDS: Array<{ command: string; description: string }> = [
   { command: "watch", description: "Track a specific company's Greenhouse job board, e.g. /watch acme or a careers-page link" },
   { command: "unwatch", description: "Stop tracking a company you previously /watch'd" },
   { command: "watching", description: "List the companies you're currently watching" },
-  { command: "generalwork", description: "Turn general-work matching on or off: /generalwork on, off, or status" },
+  { command: "generalwork", description: "General-work matching: /generalwork on/off/status, or run to search now (separate from your main search)" },
   { command: "help", description: "Show this list of commands" },
 ];
 

@@ -4,6 +4,7 @@ import { runSearchAndNotify } from "./notify";
 import { planTextStep } from "./onboarding";
 import { downloadAndParseResume, isSupportedResumeMime, parseResumeText } from "./resumeParsing";
 import { handleUnwatchCommand, handleWatchCommand, handleWatchingCommand } from "./watch";
+import { handleGeneralWorkCommand } from "./generalWork";
 
 type BotConversation = NonNullable<Awaited<ReturnType<typeof getConversation>>>;
 
@@ -56,6 +57,13 @@ export async function handleIncomingMessage(message: TelegramIncomingMessage): P
     if (command === "watch") await handleWatchCommand(chatId, user.id, argument ?? "");
     else if (command === "unwatch") await handleUnwatchCommand(chatId, user.id, argument ?? "");
     else await handleWatchingCommand(chatId, user.id);
+    return;
+  }
+
+  const generalWorkCommand = message.text ? /^\/generalwork(?:@\S+)?(?:\s+(.*))?$/.exec(message.text.trim()) : null;
+  if (generalWorkCommand) {
+    const user = await getOrCreateUserForChat(chatId, message.chat.username ?? "");
+    await handleGeneralWorkCommand(chatId, user.id, generalWorkCommand[1] ?? "");
     return;
   }
 

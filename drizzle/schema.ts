@@ -64,6 +64,7 @@ export const searchSettings = mysqlTable(
     scheduledTime: varchar("scheduledTime", { length: 20 }).notNull().default("07:30"),
     scheduleCronTaskUid: varchar("schedule_cron_task_uid", { length: 65 }),
     dailyNotificationEnabled: boolean("dailyNotificationEnabled").notNull().default(true),
+    generalWorkEnabled: boolean("generalWorkEnabled").notNull().default(false),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
   table => [uniqueIndex("search_settings_user_unique").on(table.userId)],

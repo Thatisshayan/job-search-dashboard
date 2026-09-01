@@ -10,8 +10,8 @@ describe("/help", () => {
     }
   });
 
-  it("includes the actually-implemented commands (start, watch, unwatch, watching, help)", () => {
+  it("includes the actually-implemented commands (start, watch, unwatch, watching, generalwork, help)", () => {
     const names = BOT_COMMANDS.map(c => c.command);
-    expect(names).toEqual(expect.arrayContaining(["start", "watch", "unwatch", "watching", "help"]));
+    expect(names).toEqual(expect.arrayContaining(["start", "watch", "unwatch", "watching", "generalwork", "help"]));
   });
 });

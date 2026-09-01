@@ -108,6 +108,29 @@ export async function saveSearchSettingsFromOnboarding(userId: number, settings:
 }
 
 /**
+ * Reads back a bot user's own search_settings row directly (no
+ * ensureDashboardSetup side effect — that's the website/public-workspace
+ * flow's helper in server/db.ts; bot users are provisioned via
+ * getOrCreateUserForChat/saveSearchSettingsFromOnboarding instead).
+ */
+export async function getSearchSettingsForUser(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  return (await db.select().from(searchSettings).where(eq(searchSettings.userId, userId)).limit(1))[0];
+}
+
+/**
+ * Phase 14b: toggles the general-work track's enablement. Does not itself
+ * start a search — see /generalwork's "run" step (Phase 14c, not yet
+ * built), which checks this flag before running.
+ */
+export async function setGeneralWorkEnabled(userId: number, enabled: boolean): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(searchSettings).set({ generalWorkEnabled: enabled }).where(eq(searchSettings.userId, userId));
+}
+
+/**
  * importVerifiedListingBatch requires an existing, enabled sourceConfigs row
  * matching the batch's sourceName — auto-provision one for a bot user the
  * first time an automated search runs for them, rather than requiring a

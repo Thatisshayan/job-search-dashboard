@@ -1,0 +1,1 @@
+ALTER TABLE `search_settings` ADD `generalWorkEnabled` boolean DEFAULT false NOT NULL;

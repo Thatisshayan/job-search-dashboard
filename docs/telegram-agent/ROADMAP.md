@@ -409,7 +409,7 @@ upload, added to `targetTitles` only on explicit confirmation (consistent
 with this project's require-confirmation pattern everywhere else). Not
 scoped in detail yet.
 
-## Phase 14 — External-profile import + parallel "immediate hiring" track (scoped, not built)
+## Phase 14 — External-profile import + parallel "immediate hiring" track ✅ built, not yet live-tested
 
 Raised by the user 2026-08-31, scoped 2026-09-01. Three separable pieces,
 decided independently:
@@ -435,20 +435,21 @@ exception to that earlier precedent, not a reversal of it. Scope this
 narrowly: single on-demand profile fetch per user request, not a crawler,
 not run on a schedule, no caching/redistribution of the fetched page.
 
-- [ ] New `server/profileImport/linkedin.ts` (naming TBD — generalize for
-  Indeed too): `isSupportedProfileUrl()` allowlist (LinkedIn/Indeed
-  profile-page hostnames only, mirroring `isGreenhouseApplyUrl`'s
-  pattern), `fetchPublicProfileText()` (Camoufox navigate + extract
-  visible text, no login flow, no cookie/session persistence).
-- [ ] Bot: accept a pasted profile URL anywhere the résumé step currently
-  accepts a file/pasted text; route into the new fetch path, then into
-  the same `parseResumeText` call already used today.
-- [ ] Handle fetch failure (page structure changed, profile private,
-  bot-detection triggered anyway) by falling back to asking for a
-  pasted-text/file résumé — never fail onboarding outright.
-- [ ] Tests: URL-allowlist logic (pure, like `isGreenhouseApplyUrl`'s
-  tests) — no live network calls in the test suite, consistent with
-  every other I/O-touching feature in this codebase.
+- [x] `server/profileImport/publicProfile.ts`: `isSupportedProfileUrl()`
+  allowlist (LinkedIn `/in/` profiles, Indeed `/r/`, `/resume/`,
+  `/profile/` paths), `fetchPublicProfileText()` (Camoufox navigate +
+  extract visible `<body>` text, no login flow, no cookie/session
+  persistence, never throws — returns null on any failure).
+- [x] Bot: a pasted profile URL is recognized in the résumé-intake step
+  (`handler.ts`'s `handleResumeUpload`, checked before the pasted-text-
+  length branch since a bare URL is short) and routed into
+  `parseResumeText`, same as today's pasted-text path.
+- [x] Fetch failure (private profile, unsupported page, bot-detection
+  triggered anyway, page structure changed) falls back to asking for a
+  pasted/uploaded résumé — never fails onboarding outright.
+- [x] Tests: `publicProfile.test.ts` — URL-allowlist logic including a
+  subdomain-spoofing rejection case (`evil-linkedin.com.attacker.net`),
+  no live network calls.
 
 ### 14b. Onboarding question: open to immediate/general work?
 
@@ -458,10 +459,14 @@ who already finished onboarding before this shipped). Answer is stored
 per-user (new `searchSettings` boolean, e.g. `generalWorkEnabled`) — it
 does not by itself trigger any search; it only unlocks 14c's command.
 
-- [ ] Schema: `generalWorkEnabled` boolean column on `search_settings`,
-  default `false`.
-- [ ] Onboarding step + standalone toggle command, following the existing
-  `planTextStep`/button-quick-pick patterns from Phase 2/8b.
+- [x] Schema: `generalWorkEnabled` boolean column on `search_settings`
+  (migration `0005_tense_tattoo.sql`), default `false`.
+- [x] Standalone `/generalwork on`/`off`/`status` command
+  (`telegramBot/generalWork.ts`), following `/watch`'s command structure.
+  **Simplified from the original plan**: shipped as a command only, not
+  also an onboarding step — the command covers the same need with less
+  onboarding-flow complexity, and can still be added as an onboarding
+  step later if that friction turns out to matter in practice.
 
 ### 14c. Parallel general-work track — fully separate, on request only
 
@@ -475,27 +480,48 @@ scheduled daily run for the main career track. D2's human-in-the-loop
 gate applies identically; this only adds a second thing the user can ask
 for, never a second thing that fires without being asked.
 
-- [ ] A general-purpose tailored resume: reuse
-  `generateTailoredMaterials`/`buildTailoredResumePdf` as-is (both are
-  already job-agnostic pure functions) — no new document-generation code
-  needed, just a different job/title input.
-- [ ] `runGeneralWorkSearchForUser()` in `telegramBot/jobSearch.ts`,
-  mirroring `runJobSearchForUser()` but against a fixed general-titles
-  list instead of `searchSettings.targetTitles`; still respects the
-  user's city/radius.
-- [ ] Wire `/generalwork` into `handler.ts`'s command routing, gated on
-  `generalWorkEnabled` (nudge to enable it via `/generalwork on` if not).
-- [ ] Applications from this track need to be distinguishable from
-  main-track ones (for `applicationFlow`/dedup correctness) — likely a
-  `track` column (`"career" | "general"`) on `applications` rather than
-  inferring it after the fact.
-- [ ] Tests: `runGeneralWorkSearchForUser`'s title-list logic and the
-  `track` dedup/filtering behavior, following the existing pure-logic
-  test pattern.
+- [x] `runGeneralWorkSearchForUser()` in `telegramBot/jobSearch.ts`:
+  searches Adzuna against a fixed `GENERAL_WORK_TITLES` list (not
+  `searchSettings.targetTitles`), still respecting the user's city/radius.
+- [x] **Revised from the original plan, for a real reason found during
+  implementation**: does *not* reuse `importVerifiedListingBatch` or
+  `scoreJob`. `importVerifiedListingBatch` recomputes and overwrites the
+  user's entire daily `shortlistEntries` row across *all* of their
+  scorecards on every call — reusing it here would have silently merged
+  general-work results into the exact daily shortlist
+  `runSearchAndNotify`/the scheduler read, which is precisely what the
+  "fully separate, on request" decision above said not to do. Writes
+  directly to the shared `jobs` table instead, under a distinct
+  `"Adzuna:GeneralWork"` source name, and never touches
+  `shortlistEntries`/`scorecards` at all — this track has no numeric fit
+  score by design (scoring general-labor titles against a candidate's
+  real career-target titles would misrepresent them as poor matches).
+- [x] **Simplified from the original plan**: no new `applications.track`
+  column. The distinct `"Adzuna:GeneralWork"` `jobs.sourceName` already
+  distinguishes a general-work application from a career-track one via
+  its `jobId` — a schema column would have duplicated information the
+  source name already carries.
+- [x] Wired into `/generalwork run` (`generalWork.ts`), gated on
+  `generalWorkEnabled`; filters out jobs the user already has an
+  `applications` row for, then sends its own intro message + one
+  Approve/Decline card per new job via the existing
+  `prepareApplicationForTelegram` — separate messages, never interleaved
+  with the daily career-track stream.
+- [x] A general-purpose tailored resume: reuses
+  `generateTailoredMaterials`/`buildTailoredResumePdf` unchanged (both
+  were already job-agnostic pure functions) — no new document-generation
+  code needed.
+- [x] Tests: `generalWork.test.ts` covers the on/off/status/run command
+  logic (mocked DB/search/application layers) — 8 tests. No dedicated
+  fixture test for `runGeneralWorkSearchForUser` itself yet, since its
+  logic is mostly I/O orchestration (Adzuna call, `jobs`/`applications`
+  reads/writes) rather than pure transformation like `greenhouseBoard.ts`'s
+  mapping functions; the `GENERAL_WORK_TITLES` list itself is a plain
+  constant with nothing to unit-test.
 
-Not yet built — this is the scoped plan, ready to implement in order
-14b → 14a → 14c (settings/schema first since both other pieces depend on
-it, then profile import, then the track itself, which depends on both).
+Built 2026-09-01, `pnpm check`/`test`/`build` all clean (88 tests
+passing). **Not yet live-tested**: no real `/generalwork on` → `run` →
+Approve cycle has been run against a real Telegram chat yet.
 
 ## Phase 9 — Retire or shrink the web dashboard
 

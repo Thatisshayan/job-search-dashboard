@@ -1,4 +1,4 @@
-import { sendButtonMessage, sendPlainMessage } from "../telegram";
+import { BOT_COMMANDS, sendButtonMessage, sendPlainMessage } from "../telegram";
 import { getConversation, getOrCreateUserForChat, saveCandidateProfile, saveSearchSettingsFromOnboarding, setConversationState, startConversation } from "./db";
 import { runSearchAndNotify } from "./notify";
 import { planTextStep } from "./onboarding";
@@ -21,13 +21,31 @@ const WELCOME_TEXT =
 const MAX_RESUME_BYTES = 10 * 1024 * 1024; // 10 MB — generous for a resume, keeps memory use bounded.
 const MIN_PASTED_RESUME_CHARS = 200; // below this, treat it as a stray reply, not a resume paste.
 
+/**
+ * Generated from telegram.ts's BOT_COMMANDS (the same list registered with
+ * Telegram's "/" autocomplete menu via setBotCommands at boot) so the two
+ * can never list different commands.
+ */
+export const HELP_TEXT = `Here's everything I can do:\n\n${BOT_COMMANDS.map(({ command, description }) => `/${command} — ${description}`).join("\n")}\n\nDuring onboarding, just reply with text (or tap a button when I offer one) — no special command needed for that part. Approve/Decline/Confirm on job cards are buttons on the message itself, not commands.`;
+
+function stripBotMention(command: string): string {
+  return command.replace(/@\S+$/, "");
+}
+
 export async function handleIncomingMessage(message: TelegramIncomingMessage): Promise<void> {
   const chatId = String(message.chat.id);
+  const firstWord = message.text?.trim().split(/\s+/)[0];
+  const command = firstWord?.startsWith("/") ? stripBotMention(firstWord) : null;
 
-  if (message.text?.trim() === "/start") {
+  if (command === "/start") {
     const user = await getOrCreateUserForChat(chatId, message.chat.username ?? "");
     await startConversation(user.id, chatId);
     await sendPlainMessage(chatId, WELCOME_TEXT);
+    return;
+  }
+
+  if (command === "/help") {
+    await sendPlainMessage(chatId, HELP_TEXT);
     return;
   }
 

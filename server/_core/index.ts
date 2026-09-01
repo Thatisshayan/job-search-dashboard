@@ -11,6 +11,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { registerTelegramWebhook } from "../telegramWebhook";
 import { startDailyScheduler } from "../scheduler";
+import { setBotCommands } from "../telegram";
 import { assertRequiredEnv } from "./env";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -96,6 +97,14 @@ async function startServer() {
   });
 
   startDailyScheduler();
+
+  // Best-effort: a missing/misconfigured bot token must never break server
+  // boot — same graceful-degradation philosophy as notifyOwner elsewhere.
+  try {
+    await setBotCommands();
+  } catch (error) {
+    console.error("[TelegramBot] Could not register bot commands with Telegram", error);
+  }
 }
 
 startServer().catch(console.error);

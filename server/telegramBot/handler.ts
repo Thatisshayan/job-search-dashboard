@@ -5,6 +5,7 @@ import { planTextStep } from "./onboarding";
 import { downloadAndParseResume, isSupportedResumeMime, parseResumeText } from "./resumeParsing";
 import { handleUnwatchCommand, handleWatchCommand, handleWatchingCommand } from "./watch";
 import { handleGeneralWorkCommand } from "./generalWork";
+import { fetchPublicProfileText, isSupportedProfileUrl } from "../profileImport/publicProfile";
 
 type BotConversation = NonNullable<Awaited<ReturnType<typeof getConversation>>>;
 
@@ -17,7 +18,7 @@ export type TelegramIncomingMessage = {
 };
 
 const WELCOME_TEXT =
-  "Hi! I'll help you search for jobs that match your resume.\n\nSend it as a PDF or Word (.docx) file, or just paste the text of your resume directly in the chat.";
+  "Hi! I'll help you search for jobs that match your resume.\n\nSend it as a PDF or Word (.docx) file, paste the text of your resume directly in the chat, or paste a public LinkedIn/Indeed profile link.";
 
 const MAX_RESUME_BYTES = 10 * 1024 * 1024; // 10 MB — generous for a resume, keeps memory use bounded.
 const MIN_PASTED_RESUME_CHARS = 200; // below this, treat it as a stray reply, not a resume paste.
@@ -131,12 +132,35 @@ async function handleResumeUpload(chatId: string, userId: number, message: Teleg
   }
 
   const pastedText = message.text?.trim();
+  if (pastedText && isSupportedProfileUrl(pastedText)) {
+    await handleProfileUrl(chatId, userId, pastedText);
+    return;
+  }
   if (pastedText && pastedText.length >= MIN_PASTED_RESUME_CHARS) {
     await handleResumePastedText(chatId, userId, pastedText);
     return;
   }
 
-  await sendPlainMessage(chatId, "Please send your resume as a PDF or Word (.docx) file, or paste the full text of your resume in a message.");
+  await sendPlainMessage(chatId, "Please send your resume as a PDF or Word (.docx) file, paste the full text of your resume, or paste a public LinkedIn/Indeed profile link.");
+}
+
+async function handleProfileUrl(chatId: string, userId: number, profileUrl: string): Promise<void> {
+  await sendPlainMessage(chatId, "Got it — reading your public profile now, one moment…");
+
+  const text = await fetchPublicProfileText(profileUrl);
+  if (!text) {
+    await sendPlainMessage(chatId, "I couldn't read that profile — it may be private, unsupported, or the page didn't load. Please send your resume as a PDF/Word file, or paste the resume text directly instead.");
+    return;
+  }
+
+  try {
+    const parsed = await parseResumeText(text);
+    await finishResumeIntake(chatId, userId, { ...parsed, resumeLabel: "Imported from public profile link" });
+  } catch (error) {
+    console.error("[TelegramBot] Profile-URL parsing failed", error);
+    const reason = error instanceof Error ? error.message : "something went wrong reading that profile";
+    await sendPlainMessage(chatId, `I couldn't process that (${reason}). Please send your resume as a PDF/Word file, or paste the resume text directly instead.`);
+  }
 }
 
 async function handleResumeDocument(chatId: string, userId: number, document: NonNullable<TelegramIncomingMessage["document"]>): Promise<void> {

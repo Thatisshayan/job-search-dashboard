@@ -17,7 +17,7 @@ export default defineConfig({
   test: {
     environment: "node",
     environmentMatchGlobs: [["client/**", "jsdom"]],
-    setupFiles: ["./client/src/test/setup.ts"],
+    setupFiles: ["./server/test/setupEnv.ts", "./client/src/test/setup.ts"],
     include: [
       "server/**/*.test.ts",
       "server/**/*.spec.ts",

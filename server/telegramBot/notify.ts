@@ -36,7 +36,11 @@ export async function runSearchAndNotify(chatId: string, userId: number): Promis
 
     const dateKey = getLocalDateKey("America/Toronto");
     const shortlist = await listShortlist(userId, dateKey);
-    const undecided = shortlist.filter(item => !item.application);
+    // An `applications` row only means "already handled" if its Telegram card was
+    // actually delivered (telegramMessageId set). A row stuck without one means an
+    // earlier delivery attempt failed before recording success — treat it the same
+    // as never having been sent, so it gets retried instead of silently dropped.
+    const undecided = shortlist.filter(item => !item.application || !item.application.telegramMessageId);
     const alreadyDecided = shortlist.length - undecided.length;
 
     if (undecided.length === 0) {

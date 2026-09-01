@@ -115,18 +115,27 @@ export async function prepareApplicationForTelegram(userId: number, jobId: numbe
   const application = (await db.select().from(applications).where(and(eq(applications.userId, userId), eq(applications.jobId, jobId))).limit(1))[0];
   if (!application) throw new Error("Application record could not be prepared");
 
-  const message = await sendApprovalCard({
-    chatId: connection[0].chatId,
-    applicationId: application.id,
-    title: job[0].title,
-    employer: job[0].employer,
-    location: job[0].location,
-    score: scorecard[0]?.totalScore ?? null,
-    rationale: scorecard[0]?.rationale ?? "This test review uses verified candidate-profile evidence.",
-    testMode,
-    approveCallback: createApprovalCallback(application.id, "approve", nonce),
-    declineCallback: createApprovalCallback(application.id, "decline", nonce),
-  });
+  let message;
+  try {
+    message = await sendApprovalCard({
+      chatId: connection[0].chatId,
+      applicationId: application.id,
+      title: job[0].title,
+      employer: job[0].employer,
+      location: job[0].location,
+      score: scorecard[0]?.totalScore ?? null,
+      rationale: scorecard[0]?.rationale ?? "This test review uses verified candidate-profile evidence.",
+      testMode,
+      approveCallback: createApprovalCallback(application.id, "approve", nonce),
+      declineCallback: createApprovalCallback(application.id, "decline", nonce),
+    });
+  } catch (error) {
+    // The row above is only a placeholder until the card is actually delivered.
+    // If delivery fails, remove it — otherwise every future run would see this
+    // job as "already decided" and silently never offer it again.
+    await db.delete(applications).where(eq(applications.id, application.id));
+    throw error;
+  }
   await db.update(applications).set({ telegramMessageId: message.message_id }).where(eq(applications.id, application.id));
   return (await db.select().from(applications).where(eq(applications.id, application.id)).limit(1))[0];
 }

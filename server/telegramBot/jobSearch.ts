@@ -187,10 +187,12 @@ export async function runGeneralWorkSearchForUser(userId: number): Promise<Gener
   if (jobIds.length === 0) return { ok: false, reason: "no_results" };
 
   const existingApplications = await db
-    .select({ jobId: applications.jobId })
+    .select({ jobId: applications.jobId, telegramMessageId: applications.telegramMessageId })
     .from(applications)
     .where(and(eq(applications.userId, userId), inArray(applications.jobId, jobIds)));
-  const alreadyDecided = new Set(existingApplications.map(row => row.jobId));
+  // Only a row whose Telegram card actually got delivered counts as "already
+  // handled" — see the matching comment in telegramBot/notify.ts.
+  const alreadyDecided = new Set(existingApplications.filter(row => row.telegramMessageId).map(row => row.jobId));
 
   const rows = await db.select().from(jobs).where(inArray(jobs.id, jobIds));
   const newJobs: GeneralWorkJob[] = rows

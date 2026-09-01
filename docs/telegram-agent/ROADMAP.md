@@ -537,6 +537,84 @@ Built 2026-09-01, `pnpm check`/`test`/`build` all clean (88 tests
 passing). **Not yet live-tested**: no real `/generalwork on` → `run` →
 Approve cycle has been run against a real Telegram chat yet.
 
+## Phase 15 — Onboarding rework: track choice, resume-build path, recurring schedule ✅ built, not yet live-tested
+
+Raised by the user 2026-09-01 via a hand-drawn flow diagram, after live
+testing exposed that Phase 8's daily scheduler defaults (`scheduledTime:
+"07:30"`, `dailyNotificationEnabled: true`) were silently hardcoded rather
+than ever asked, and after a request to split onboarding into an
+immediate/general-work vs. career-work choice up front, with an explicit
+path for a user who doesn't have a resume ready. Clarified in conversation:
+"immediate hiring" in the drawing is the existing general-work track;
+"career work" is the existing career-titles track; recurring-question
+placement was left to implementation judgment (placed right after radius,
+before finalizing).
+
+New onboarding sequence: `/start` → **track choice** (immediate/general vs.
+career, buttons) → **resume choice** (have one ready vs. build one for me,
+buttons) → resume intake (unchanged file/paste/profile-URL path, or the new
+build path below) → target titles (**skipped** for the general track — it
+already searches a fixed title list) → location → radius → **recurring
+choice** (buttons) → **recurring time** (only if yes) → finalize.
+
+- [x] `OnboardingState` (drizzle/schema.ts's `bot_conversations.state` enum
+  and `telegramBot/db.ts`) extended with `awaiting_track_choice`,
+  `awaiting_resume_choice`, `awaiting_resume_build`,
+  `awaiting_recurring_choice`, `awaiting_recurring_time`. Existing states
+  kept as-is (backward compatible with any conversation mid-flow at deploy
+  time, and old rows in enum are still valid values).
+- [x] `telegramBot/onboarding.ts`'s pure `planTextStep` extended with all
+  new transitions, unit-tested (`onboarding.test.ts`, 17 tests). Answers
+  accept both a typed word ("yes"/"immediate"/"build") and a button tap —
+  buttons post the same plain value through the same code path
+  (`telegramWebhook.ts`'s new generic `obstep:<step>:<value>` callback
+  handler, extending the existing `radius:<n>` pattern).
+- [x] **Real bug caught by the new unit tests before shipping**: the
+  yes/no matcher used `.includes("y")` / `.includes("n")` as single-letter
+  shorthand, which also matched any word merely containing that letter
+  ("maybe", "understand") — silently misread as "yes"/"no". Fixed to exact
+  equality for the single-letter shorthand.
+- [x] **Resume-build path** (`handleResumeBuildIntake` in `handler.ts`):
+  a short freeform "tell me your title/experience/skills" answer, fed
+  through the same `parseResumeText` strict-JSON-schema extraction already
+  used for a pasted resume — a different conversational path into the
+  same, already-proven extraction pipeline, not a new one.
+- [x] `search_settings` gets a new `track` enum column (`career` |
+  `general`, default `career` — migration `0006_vengeful_firebrand.sql`).
+  Choosing "general" at onboarding also sets the existing
+  `generalWorkEnabled` flag, so `/generalwork status|run` keep working
+  unchanged for a user who picked that track up front.
+- [x] `dailyNotificationEnabled`/`scheduledTime` are now genuinely
+  user-driven (`saveSearchSettingsFromOnboarding` takes them as required
+  params) instead of hardcoded `true`/`"07:30"` inside `telegramBot/db.ts`.
+- [x] `scheduler.ts` branches on `settings.track` (general → the exported
+  `runGeneralWorkAndNotify`, career → the existing `runSearchAndNotify`) —
+  the daily-recurring promise now actually applies to a general-track user
+  too, not just career-track. `runGeneralWorkSearchForUser` now writes a
+  minimal `job_runs` row (it never did before, since it deliberately
+  bypasses `importVerifiedListingBatch`), purely so the scheduler's
+  existing "already ran today" dedup logic works for this track as well.
+- [x] **Real bug fixed as a byproduct, not the original goal**: a job's
+  Telegram approval card is only actually sent after
+  `prepareApplicationForTelegram`'s DB row is created; if the send failed,
+  the row stayed committed anyway, so every later run treated that job as
+  "already decided" and never offered it again — this is what produced the
+  user's "it told me it already sent today's shortlist, but it never did"
+  report. Fixed: the row is deleted if the send throws, and both
+  `notify.ts` and `jobSearch.ts`'s general-work path now only treat a row
+  as "already handled" once `telegramMessageId` is actually set.
+- [x] `pnpm check`/`test` clean (98 tests passing, up from 88).
+
+**Known gap, not built this pass:** there's no bot command to change the
+recurring on/off/time choice after onboarding finishes (unlike
+`/generalwork`'s on/off/status pattern) — a user who declines daily checks,
+or wants a different time, has no way to change that without a fresh
+`/start`. Worth a `/schedule` command later if this turns out to matter.
+
+**Not yet live-tested**: no real `/start` → track choice → resume-build (or
+ready) → recurring-yes-with-time cycle has been run against a real
+Telegram chat yet.
+
 ## Phase 9 — Retire or shrink the web dashboard
 
 - [ ] Decide: keep `client/` as a thin read-only admin/debug view, or remove it once the bot covers the full loop

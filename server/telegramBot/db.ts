@@ -3,7 +3,17 @@ import { botConversations, candidateProfiles, searchSettings, sourceConfigs, use
 import { getDb } from "../db";
 import { bindTelegramConnection } from "../applicationService";
 
-export type OnboardingState = "awaiting_resume" | "awaiting_target_titles" | "awaiting_location" | "awaiting_radius" | "idle";
+export type OnboardingState =
+  | "awaiting_track_choice"
+  | "awaiting_resume_choice"
+  | "awaiting_resume"
+  | "awaiting_resume_build"
+  | "awaiting_target_titles"
+  | "awaiting_location"
+  | "awaiting_radius"
+  | "awaiting_recurring_choice"
+  | "awaiting_recurring_time"
+  | "idle";
 
 /**
  * Resolves the app user behind a Telegram chat, creating one on first
@@ -39,8 +49,8 @@ export async function startConversation(userId: number, chatId: string) {
   if (!db) throw new Error("Database unavailable");
   await db
     .insert(botConversations)
-    .values({ userId, chatId, state: "awaiting_resume", context: {} })
-    .onDuplicateKeyUpdate({ set: { state: "awaiting_resume", context: {} } });
+    .values({ userId, chatId, state: "awaiting_track_choice", context: {} })
+    .onDuplicateKeyUpdate({ set: { state: "awaiting_track_choice", context: {} } });
 }
 
 export async function setConversationState(chatId: string, state: OnboardingState, context: Record<string, unknown>) {
@@ -87,13 +97,25 @@ export async function saveCandidateProfile(userId: number, profile: ParsedResume
   await db.insert(candidateProfiles).values(values).onDuplicateKeyUpdate({ set: values });
 }
 
-export type OnboardingSettings = { targetTitles: string[]; city: string; radiusKm: number };
+export type OnboardingSettings = {
+  track: "career" | "general";
+  targetTitles: string[];
+  city: string;
+  radiusKm: number;
+  dailyNotificationEnabled: boolean;
+  scheduledTime: string;
+};
 
 export async function saveSearchSettingsFromOnboarding(userId: number, settings: OnboardingSettings) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   const values = {
     userId,
+    track: settings.track,
+    // The immediate/career choice made at onboarding also flips the existing
+    // generalWorkEnabled flag, so /generalwork status|run keep working
+    // unchanged for a user who picked the immediate-hiring track up front.
+    generalWorkEnabled: settings.track === "general",
     targetTitles: settings.targetTitles,
     city: settings.city,
     radiusKm: settings.radiusKm,
@@ -101,8 +123,8 @@ export async function saveSearchSettingsFromOnboarding(userId: number, settings:
     minimumScore: 60,
     shortlistLimit: 20,
     timezone: "America/Toronto",
-    scheduledTime: "07:30",
-    dailyNotificationEnabled: true,
+    scheduledTime: settings.scheduledTime,
+    dailyNotificationEnabled: settings.dailyNotificationEnabled,
   };
   await db.insert(searchSettings).values(values).onDuplicateKeyUpdate({ set: values });
 }

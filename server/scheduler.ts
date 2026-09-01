@@ -2,6 +2,7 @@ import { desc, eq } from "drizzle-orm";
 import { jobRuns, searchSettings, telegramConnections } from "../drizzle/schema";
 import { getDb } from "./db";
 import { runSearchAndNotify } from "./telegramBot/notify";
+import { runGeneralWorkAndNotify } from "./telegramBot/generalWork";
 import { getLocalDateKey } from "./utils/date";
 
 const CHECK_INTERVAL_MS = 60_000;
@@ -51,7 +52,11 @@ async function tick(): Promise<void> {
       )[0];
       if (!connection) continue;
 
-      await runSearchAndNotify(connection.chatId, settings.userId);
+      if (settings.track === "general") {
+        await runGeneralWorkAndNotify(connection.chatId, settings.userId);
+      } else {
+        await runSearchAndNotify(connection.chatId, settings.userId);
+      }
     } catch (error) {
       console.error(`[scheduler] Daily search failed for user ${settings.userId}`, error);
     }

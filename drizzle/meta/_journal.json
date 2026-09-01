@@ -43,6 +43,13 @@
       "when": 1788240965466,
       "tag": "0005_tense_tattoo",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1788302023842,
+      "tag": "0006_vengeful_firebrand",
+      "breakpoints": true
     }
   ]
 }

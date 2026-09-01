@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
-import { applications, jobs, searchSettings } from "../../drizzle/schema";
+import { applications, jobRuns, jobs, searchSettings } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { importVerifiedListingBatch, type VerifiedListing } from "../verifiedListingImport";
 import { ADZUNA_SOURCE_NAME, adzunaJobToVerifiedListing, isAdzunaConfigured, searchAdzunaJobs } from "../jobSearch/adzuna";
@@ -198,6 +198,19 @@ export async function runGeneralWorkSearchForUser(userId: number): Promise<Gener
   const newJobs: GeneralWorkJob[] = rows
     .filter(row => !alreadyDecided.has(row.id))
     .map(row => ({ jobId: row.id, title: row.title, employer: row.employer, location: row.location, originalApplyUrl: row.originalApplyUrl }));
+
+  // This track never touches importVerifiedListingBatch (see the function
+  // comment above), which is normally what writes `job_runs` — write a
+  // minimal completed record here instead, purely so scheduler.ts's
+  // "already ran today" dedup also works for general-track daily runs.
+  await db.insert(jobRuns).values({
+    userId,
+    status: "completed",
+    listingsCollected: listings.length,
+    jobsScored: jobIds.length,
+    shortlistCount: newJobs.length,
+    completedAt: new Date(),
+  });
 
   return { ok: true, found: listings.length, newJobs };
 }

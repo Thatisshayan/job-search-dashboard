@@ -46,6 +46,34 @@ export function registerTelegramWebhook(app: Express) {
       return;
     }
 
+    // Phase 15: generic onboarding-button handler for the track / resume /
+    // recurring choice steps. Each button's callback_data carries the step
+    // name (matched against the conversation's expected state, so a stale
+    // button tap on an old message can't skip the user out of sequence) and
+    // the plain-text value to feed into the same planTextStep() logic a
+    // typed reply would use.
+    const onboardingButtonMatch = /^obstep:(track|resume|recurring):(\w+)$/.exec(String(callback.data));
+    if (onboardingButtonMatch) {
+      const [, step, value] = onboardingButtonMatch;
+      const expectedState: Record<string, string> = {
+        track: "awaiting_track_choice",
+        resume: "awaiting_resume_choice",
+        recurring: "awaiting_recurring_choice",
+      };
+      const chatId = String(callback.message.chat.id);
+      try {
+        const conversation = await getConversation(chatId);
+        if (conversation?.state === expectedState[step]) {
+          await advanceOnboardingStep(chatId, conversation, value);
+        }
+        await answerTelegramCallback(String(callback.id), value);
+      } catch (error) {
+        console.error("[TelegramBot] Failed to handle onboarding button tap", error);
+      }
+      res.status(200).json({ ok: true });
+      return;
+    }
+
     const chatId = String(callback.message.chat.id);
     const data = String(callback.data);
 

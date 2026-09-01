@@ -1,0 +1,2 @@
+ALTER TABLE `bot_conversations` MODIFY COLUMN `state` enum('awaiting_track_choice','awaiting_resume_choice','awaiting_resume','awaiting_resume_build','awaiting_target_titles','awaiting_location','awaiting_radius','awaiting_recurring_choice','awaiting_recurring_time','idle') NOT NULL DEFAULT 'awaiting_track_choice';--> statement-breakpoint
+ALTER TABLE `search_settings` ADD `track` enum('career','general') DEFAULT 'career' NOT NULL;

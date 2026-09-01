@@ -4,7 +4,7 @@ import { runSearchAndNotify } from "./notify";
 import { planTextStep } from "./onboarding";
 import { downloadAndParseResume, isSupportedResumeMime, parseResumeText } from "./resumeParsing";
 import { handleUnwatchCommand, handleWatchCommand, handleWatchingCommand } from "./watch";
-import { handleGeneralWorkCommand } from "./generalWork";
+import { handleGeneralWorkCommand, runGeneralWorkAndNotify } from "./generalWork";
 import { fetchPublicProfileText, isSupportedProfileUrl } from "../profileImport/publicProfile";
 
 type BotConversation = NonNullable<Awaited<ReturnType<typeof getConversation>>>;
@@ -18,10 +18,11 @@ export type TelegramIncomingMessage = {
 };
 
 const WELCOME_TEXT =
-  "Hi! I'll help you search for jobs that match your resume.\n\nSend it as a PDF or Word (.docx) file, paste the text of your resume directly in the chat, or paste a public LinkedIn/Indeed profile link.";
+  "Hi! I'll help you search for jobs.\n\nAre you looking for immediate/general work, or career-focused work?";
 
 const MAX_RESUME_BYTES = 10 * 1024 * 1024; // 10 MB — generous for a resume, keeps memory use bounded.
 const MIN_PASTED_RESUME_CHARS = 200; // below this, treat it as a stray reply, not a resume paste.
+const MIN_BUILD_INTAKE_CHARS = 20; // resume-build Q&A intake is guided, so needs far less than a full pasted resume.
 
 /**
  * Generated from telegram.ts's BOT_COMMANDS (the same list registered with
@@ -42,7 +43,12 @@ export async function handleIncomingMessage(message: TelegramIncomingMessage): P
   if (command === "/start") {
     const user = await getOrCreateUserForChat(chatId, message.chat.username ?? "");
     await startConversation(user.id, chatId);
-    await sendPlainMessage(chatId, WELCOME_TEXT);
+    await sendButtonMessage(chatId, WELCOME_TEXT, [
+      [
+        { text: "Immediate/general work", callback_data: "obstep:track:general" },
+        { text: "Career work", callback_data: "obstep:track:career" },
+      ],
+    ]);
     return;
   }
 
@@ -75,7 +81,16 @@ export async function handleIncomingMessage(message: TelegramIncomingMessage): P
   }
 
   if (conversation.state === "awaiting_resume") {
-    await handleResumeUpload(chatId, conversation.userId, message);
+    await handleResumeUpload(chatId, conversation.userId, message, conversation.context ?? {});
+    return;
+  }
+
+  if (conversation.state === "awaiting_resume_build") {
+    if (!message.text || message.text.trim().length < MIN_BUILD_INTAKE_CHARS) {
+      await sendPlainMessage(chatId, "Tell me a bit more — your current or most recent job title, your experience, and your top skills.");
+      return;
+    }
+    await handleResumeBuildIntake(chatId, conversation.userId, message.text.trim(), conversation.context ?? {});
     return;
   }
 
@@ -102,13 +117,21 @@ export async function advanceOnboardingStep(chatId: string, conversation: BotCon
 
   await setConversationState(chatId, result.nextState, result.context);
   if (result.nextState === "idle") {
+    const track = (result.context.track === "general" ? "general" : "career") as "career" | "general";
     await saveSearchSettingsFromOnboarding(conversation.userId, {
-      targetTitles: result.context.targetTitles as string[],
+      track,
+      targetTitles: Array.isArray(result.context.targetTitles) ? (result.context.targetTitles as string[]) : [],
       city: result.context.city as string,
       radiusKm: result.context.radiusKm as number,
+      dailyNotificationEnabled: Boolean(result.context.dailyNotificationEnabled),
+      scheduledTime: (result.context.scheduledTime as string) ?? "07:30",
     });
     await sendPlainMessage(chatId, result.reply);
-    await runSearchAndNotify(chatId, conversation.userId);
+    if (track === "general") {
+      await runGeneralWorkAndNotify(chatId, conversation.userId);
+    } else {
+      await runSearchAndNotify(chatId, conversation.userId);
+    }
     return;
   }
 
@@ -121,30 +144,50 @@ export async function advanceOnboardingStep(chatId: string, conversation: BotCon
     return;
   }
 
+  if (result.nextState === "awaiting_resume_choice") {
+    await sendButtonMessage(chatId, result.reply, [
+      [
+        { text: "I have one ready", callback_data: "obstep:resume:ready" },
+        { text: "Build one for me", callback_data: "obstep:resume:build" },
+      ],
+    ]);
+    return;
+  }
+
+  if (result.nextState === "awaiting_recurring_choice") {
+    await sendButtonMessage(chatId, result.reply, [
+      [
+        { text: "Yes, daily", callback_data: "obstep:recurring:yes" },
+        { text: "No, on demand", callback_data: "obstep:recurring:no" },
+      ],
+    ]);
+    return;
+  }
+
   await sendPlainMessage(chatId, result.reply);
 }
 
-async function handleResumeUpload(chatId: string, userId: number, message: TelegramIncomingMessage): Promise<void> {
+async function handleResumeUpload(chatId: string, userId: number, message: TelegramIncomingMessage, context: Record<string, unknown>): Promise<void> {
   const document = message.document;
   if (document) {
-    await handleResumeDocument(chatId, userId, document);
+    await handleResumeDocument(chatId, userId, document, context);
     return;
   }
 
   const pastedText = message.text?.trim();
   if (pastedText && isSupportedProfileUrl(pastedText)) {
-    await handleProfileUrl(chatId, userId, pastedText);
+    await handleProfileUrl(chatId, userId, pastedText, context);
     return;
   }
   if (pastedText && pastedText.length >= MIN_PASTED_RESUME_CHARS) {
-    await handleResumePastedText(chatId, userId, pastedText);
+    await handleResumePastedText(chatId, userId, pastedText, context);
     return;
   }
 
   await sendPlainMessage(chatId, "Please send your resume as a PDF or Word (.docx) file, paste the full text of your resume, or paste a public LinkedIn/Indeed profile link.");
 }
 
-async function handleProfileUrl(chatId: string, userId: number, profileUrl: string): Promise<void> {
+async function handleProfileUrl(chatId: string, userId: number, profileUrl: string, context: Record<string, unknown>): Promise<void> {
   await sendPlainMessage(chatId, "Got it — reading your public profile now, one moment…");
 
   const text = await fetchPublicProfileText(profileUrl);
@@ -155,7 +198,7 @@ async function handleProfileUrl(chatId: string, userId: number, profileUrl: stri
 
   try {
     const parsed = await parseResumeText(text);
-    await finishResumeIntake(chatId, userId, { ...parsed, resumeLabel: "Imported from public profile link" });
+    await finishResumeIntake(chatId, userId, { ...parsed, resumeLabel: "Imported from public profile link" }, context);
   } catch (error) {
     console.error("[TelegramBot] Profile-URL parsing failed", error);
     const reason = error instanceof Error ? error.message : "something went wrong reading that profile";
@@ -163,7 +206,7 @@ async function handleProfileUrl(chatId: string, userId: number, profileUrl: stri
   }
 }
 
-async function handleResumeDocument(chatId: string, userId: number, document: NonNullable<TelegramIncomingMessage["document"]>): Promise<void> {
+async function handleResumeDocument(chatId: string, userId: number, document: NonNullable<TelegramIncomingMessage["document"]>, context: Record<string, unknown>): Promise<void> {
   if (!isSupportedResumeMime(document.mime_type)) {
     await sendPlainMessage(chatId, "That file type isn't supported yet — please send a PDF or Word (.docx) file, or paste the resume text instead.");
     return;
@@ -177,7 +220,7 @@ async function handleResumeDocument(chatId: string, userId: number, document: No
 
   try {
     const profile = await downloadAndParseResume(document.file_id, document.mime_type, document.file_name ?? "Resume");
-    await finishResumeIntake(chatId, userId, profile);
+    await finishResumeIntake(chatId, userId, profile, context);
   } catch (error) {
     console.error("[TelegramBot] Resume parsing failed", error);
     const reason = error instanceof Error ? error.message : "something went wrong reading that file";
@@ -185,12 +228,12 @@ async function handleResumeDocument(chatId: string, userId: number, document: No
   }
 }
 
-async function handleResumePastedText(chatId: string, userId: number, resumeText: string): Promise<void> {
+async function handleResumePastedText(chatId: string, userId: number, resumeText: string, context: Record<string, unknown>): Promise<void> {
   await sendPlainMessage(chatId, "Got it — reading your resume now, one moment…");
 
   try {
     const parsed = await parseResumeText(resumeText);
-    await finishResumeIntake(chatId, userId, { ...parsed, resumeLabel: "Pasted resume text" });
+    await finishResumeIntake(chatId, userId, { ...parsed, resumeLabel: "Pasted resume text" }, context);
   } catch (error) {
     console.error("[TelegramBot] Pasted resume parsing failed", error);
     const reason = error instanceof Error ? error.message : "something went wrong reading that text";
@@ -198,8 +241,35 @@ async function handleResumePastedText(chatId: string, userId: number, resumeText
   }
 }
 
-async function finishResumeIntake(chatId: string, userId: number, profile: Parameters<typeof saveCandidateProfile>[1]): Promise<void> {
+/**
+ * The "build one for me" path (Phase 15): a short freeform Q&A answer
+ * (job title, experience, skills, in the user's own words) rather than a
+ * real resume document. Fed through the same `parseResumeText` strict-
+ * JSON-schema extraction as a pasted resume — it's a different
+ * conversational path, not a different extraction pipeline, since the
+ * underlying LLM call already handles arbitrary unstructured input.
+ */
+async function handleResumeBuildIntake(chatId: string, userId: number, intakeText: string, context: Record<string, unknown>): Promise<void> {
+  await sendPlainMessage(chatId, "Got it — building your profile now, one moment…");
+
+  try {
+    const parsed = await parseResumeText(intakeText);
+    await finishResumeIntake(chatId, userId, { ...parsed, resumeLabel: "Built from onboarding answers" }, context);
+  } catch (error) {
+    console.error("[TelegramBot] Resume-build intake parsing failed", error);
+    const reason = error instanceof Error ? error.message : "something went wrong building that profile";
+    await sendPlainMessage(chatId, `I couldn't process that (${reason}). Tell me a bit more about your job title, experience, and skills.`);
+  }
+}
+
+async function finishResumeIntake(chatId: string, userId: number, profile: Parameters<typeof saveCandidateProfile>[1], context: Record<string, unknown>): Promise<void> {
   await saveCandidateProfile(userId, profile);
-  await setConversationState(chatId, "awaiting_target_titles", {});
-  await sendPlainMessage(chatId, `Thanks, ${profile.displayName || "there"}! I've read your resume.\n\nWhat roles are you targeting? List one or more, separated by commas.`);
+  const greeting = `Thanks, ${profile.displayName || "there"}!`;
+  if (context.track === "general") {
+    await setConversationState(chatId, "awaiting_location", { track: "general", targetTitles: [] });
+    await sendPlainMessage(chatId, `${greeting} What city or region should I search near? (e.g. "Toronto, Ontario")`);
+    return;
+  }
+  await setConversationState(chatId, "awaiting_target_titles", { track: "career" });
+  await sendPlainMessage(chatId, `${greeting} I've read your resume.\n\nWhat roles are you targeting? List one or more, separated by commas.`);
 }

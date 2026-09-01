@@ -43,7 +43,7 @@ export async function handleGeneralWorkCommand(chatId: string, userId: number, a
       await sendPlainMessage(chatId, "General-work matching is off. Say /generalwork on first, then /generalwork run.");
       return;
     }
-    await runGeneralWork(chatId, userId);
+    await runGeneralWorkAndNotify(chatId, userId);
     return;
   }
 
@@ -60,9 +60,12 @@ export async function handleGeneralWorkCommand(chatId: string, userId: number, a
  * own search, its own messages, its own Approve/Decline cards, never
  * touching the main shortlist. This is deliberate (per the 2026-09-01
  * scoping decision): general-work results are never interleaved into the
- * daily stream, only ever shown when explicitly requested here.
+ * daily stream, only ever shown when explicitly requested here. Exported
+ * (Phase 15) so it can also be the immediate post-onboarding search and the
+ * scheduler's daily run for a user whose chosen track is "general" — see
+ * telegramBot/handler.ts and scheduler.ts.
  */
-async function runGeneralWork(chatId: string, userId: number): Promise<void> {
+export async function runGeneralWorkAndNotify(chatId: string, userId: number): Promise<void> {
   await sendPlainMessage(chatId, "Searching for general-work opportunities now, one moment…");
 
   const outcome = await runGeneralWorkSearchForUser(userId);

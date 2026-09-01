@@ -374,6 +374,58 @@ technique is worth adopting:
 - [ ] **Drafter-reviewer second pass** on tailored materials (a critique
   step before finalizing) — bigger cost (2x LLM calls per job), plausible
   quality lift, not started.
+- [x] **Tailored resume always including irrelevant experience — real bug,
+  fixed 2026-08-31.** `buildTailoredResumePdf` rendered every
+  `profile.experience` entry unconditionally and fell back to an entry's
+  raw evidence bullets whenever the LLM's `experienceBullets` omitted it —
+  so an entry the model correctly judged irrelevant could never actually
+  be dropped from the output. Fixed via `selectFeaturedExperienceIndexes`
+  (falls back to every entry only if the model returned zero selections
+  at all). Found via direct user report with a resume deliberately
+  containing irrelevant experience.
+
+## Phase 12 — Multi-region search (noted, not built)
+
+Raised by the user 2026-08-31: search only ever covers one city/radius —
+confirmed real, not a matching bug. `search_settings` has exactly one
+`city` + `radiusKm` per user (unique index on `userId`), so e.g. Toronto
+and Montreal can't both be searched at once today. Needs a real design
+decision before building — either `targetCities: string[]` replacing the
+single `city` field (bigger change: Adzuna/Greenhouse-watch queries,
+scoring's `isWithinTargetRadius`, and onboarding all assume one city), or
+a `/city` command that swaps the active single region on demand (smaller
+change, but the user has to manually switch back and forth rather than
+getting both regions' results together). Not started — needs that choice
+made first.
+
+## Phase 13 — Suggest related target roles from the parsed résumé (noted, not built)
+
+Raised by the user 2026-08-31: `targetTitles` today only ever comes from
+what the user literally types during onboarding (`planTextStep`) — the
+already-parsed `candidateProfiles.experience`/`skills` (Phase 2) isn't
+used to propose titles the user didn't think to type. Plausible shape: an
+LLM call over the parsed profile, offered as suggestions after résumé
+upload, added to `targetTitles` only on explicit confirmation (consistent
+with this project's require-confirmation pattern everywhere else). Not
+scoped in detail yet.
+
+## Phase 14 — External-profile import + parallel "immediate hiring" track (noted, not built)
+
+Raised by the user 2026-08-31. Bundles three separable features — worth
+splitting into their own decisions rather than building as one blob:
+1. **Build a profile from a pasted LinkedIn/Indeed profile URL**,
+   alongside (not instead of) today's PDF/DOCX/pasted-text résumé intake.
+2. **An onboarding question**: is the user open to immediate/general work
+   in addition to their target career track?
+3. **If yes, a second parallel search+apply track** for general roles,
+   running alongside the main career-track search — with its own
+   generated general-purpose resume and its own Approve/Decline gate per
+   D2 (this does not relax the human-in-the-loop requirement; it just
+   doubles the number of things the user gets asked to review).
+Real open question before scoping further: does running two tracks at
+once make each individual shortlist noisier/harder to review, or does the
+existing per-job Approve/Decline gate already contain that risk? Worth a
+brainstorming pass before implementation, not a quick bolt-on.
 
 ## Phase 9 — Retire or shrink the web dashboard
 

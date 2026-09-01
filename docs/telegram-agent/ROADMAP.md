@@ -246,24 +246,43 @@ manual-link behavior.
   Linux — bigger than the 493MB Windows binary — plus a 65MB GeoIP database
   re-downloaded on every build) and the image pushing successfully. Service
   confirmed healthy (`200` on the deployed URL) after the fix.
-- [ ] `server/autoApply/greenhouse.ts`: detect a Greenhouse-hosted apply URL
+- [x] `server/autoApply/greenhouse.ts`: detect a Greenhouse-hosted apply URL
   (`boards.greenhouse.io` / `job-boards.greenhouse.io`), map common fields
   (name, email, phone, resume upload) from the candidate profile, screenshot
   the filled-but-unsubmitted form, and separately report any custom
   questions it couldn't map.
-- [ ] New `applications.status` value(s) and a second signed, single-use
-  callback (same nonce/replay-protection pattern as the existing Approve
-  callback) for the CONFIRM/DECLINE step, so this doesn't weaken the
-  existing anti-replay guarantees.
-- [ ] Wire into `applicationService.ts`/`telegramWebhook.ts`: on Approve,
-  if the job's `originalApplyUrl` matches a supported Greenhouse pattern,
-  branch into the new fill→screenshot→confirm flow instead of
-  `sendFinalBrowserReviewCard`. Otherwise, unchanged.
-- [ ] Detect CAPTCHA/bot-detection on the target page and fall back
-  gracefully to the manual-link flow rather than failing silently.
-- [ ] Tests: field-mapping logic tested against fixture HTML (no live
-  network calls in the test suite) — the same "pure logic vs. I/O" split
-  used everywhere else in this codebase.
+- [x] New `applications.status` values (`ready_for_auto_submit_confirmation`,
+  `submitted`) and a second signed, single-use callback
+  (`toGreenhouseConfirmCallback`/`fromGreenhouseConfirmCallback`, same
+  nonce/replay-protection pattern as the existing Approve callback, proven
+  in `applicationFlow.test.ts`) for the CONFIRM/DECLINE step.
+- [x] Wired into `applicationService.ts` (`prepareGreenhouseAutoSubmitConfirmation`,
+  `processGreenhouseConfirmationCallback`) and `telegramWebhook.ts`: on
+  Approve, if the job's `originalApplyUrl` matches a supported Greenhouse
+  pattern, it branches into the fill→screenshot→confirm flow instead of
+  `sendFinalBrowserReviewCard`. Otherwise, unchanged. The exact resume/cover-
+  letter bytes shown in the dry-run screenshot are cached
+  (`pendingSubmissions.ts`) and reused verbatim on CONFIRM rather than
+  regenerated, so the real submit can never silently diverge from what the
+  user reviewed; a missing/expired cache entry fails safe to the manual-link
+  flow instead of submitting something unreviewed.
+- [x] Detects CAPTCHA/bot-detection (`detectCaptcha`/`CAPTCHA_SELECTOR`) on
+  the target page and falls back to the manual-link flow — no Confirm card
+  is sent when a captcha is detected, and a submit attempt throws rather
+  than trying anyway.
+- [x] Tests: field-mapping logic (`FIELD_SELECTORS`, `CAPTCHA_SELECTOR`,
+  `filterUnmappedLabels`) tested against fixture HTML via jsdom — offline,
+  no live network calls, no browser launch (`greenhouse.test.ts`). This
+  confirms the selector list is internally consistent against
+  hand-written approximations of Greenhouse's two known UI variants; it is
+  not proof against real production markup, which still needs a live
+  `/watch` test (see below).
+
+**Corrected 2026-08-31**: this checklist was stale — the work above had
+already landed in commit `c993931` but the boxes were never checked off.
+Verified by reading the actual code (`applicationService.ts`,
+`telegramWebhook.ts`, `pendingSubmissions.ts`) and a full clean
+`pnpm check`/`pnpm test`/`pnpm build` pass before correcting this file.
 
 **Confirmed real limitation (2026-08-31), found while attempting live
 verification — this blocks the item above, not a "still needs testing"

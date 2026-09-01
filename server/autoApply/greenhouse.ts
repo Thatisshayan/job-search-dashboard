@@ -31,7 +31,14 @@ export function isGreenhouseApplyUrl(url: string | null | undefined): boolean {
   }
 }
 
-const FIELD_SELECTORS = {
+/**
+ * Single source of truth for both the live Playwright fill logic below and
+ * the fixture-HTML tests in greenhouse.test.ts — CSS selectors, so a plain
+ * `document.querySelector()` against a saved fixture page exercises the
+ * exact same matching a real Camoufox run would do, without launching a
+ * browser or making any network call.
+ */
+export const FIELD_SELECTORS = {
   firstName: ['#first_name', 'input[name="job_application[first_name]"]', 'input[autocomplete="given-name"]'],
   lastName: ['#last_name', 'input[name="job_application[last_name]"]', 'input[autocomplete="family-name"]'],
   email: ['#email', 'input[name="job_application[email]"]', 'input[type="email"]'],
@@ -40,7 +47,18 @@ const FIELD_SELECTORS = {
   coverLetterText: ['#cover_letter_text', 'textarea[name*="cover_letter" i]'],
 } as const;
 
+export const CAPTCHA_SELECTOR = 'iframe[src*="captcha" i], iframe[title*="challenge" i], [class*="turnstile" i]';
+
 const KNOWN_FIELD_LABEL_HINTS = ["first name", "last name", "email", "phone", "resume", "cover letter"];
+
+/** Pure: the filtering step of detectUnmappedQuestions, split out so it's testable without a DOM at all. */
+export function filterUnmappedLabels(labels: string[]): string[] {
+  return labels
+    .map(label => label.trim())
+    .filter(Boolean)
+    .filter(label => !KNOWN_FIELD_LABEL_HINTS.some(hint => label.toLowerCase().includes(hint)))
+    .slice(0, 10);
+}
 
 async function fillFirstMatch(page: Page, selectors: readonly string[], value: string): Promise<boolean> {
   for (const selector of selectors) {
@@ -67,15 +85,11 @@ async function uploadResume(page: Page, resumePdf: Buffer): Promise<boolean> {
 /** Best-effort list of question labels on the page this code doesn't know how to answer. */
 async function detectUnmappedQuestions(page: Page): Promise<string[]> {
   const labels = await page.locator("label").allTextContents();
-  return labels
-    .map(label => label.trim())
-    .filter(Boolean)
-    .filter(label => !KNOWN_FIELD_LABEL_HINTS.some(hint => label.toLowerCase().includes(hint)))
-    .slice(0, 10);
+  return filterUnmappedLabels(labels);
 }
 
 async function detectCaptcha(page: Page): Promise<boolean> {
-  const count = await page.locator('iframe[src*="captcha" i], iframe[title*="challenge" i], [class*="turnstile" i]').count();
+  const count = await page.locator(CAPTCHA_SELECTOR).count();
   return count > 0;
 }
 

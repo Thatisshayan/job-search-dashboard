@@ -409,23 +409,93 @@ upload, added to `targetTitles` only on explicit confirmation (consistent
 with this project's require-confirmation pattern everywhere else). Not
 scoped in detail yet.
 
-## Phase 14 — External-profile import + parallel "immediate hiring" track (noted, not built)
+## Phase 14 — External-profile import + parallel "immediate hiring" track (scoped, not built)
 
-Raised by the user 2026-08-31. Bundles three separable features — worth
-splitting into their own decisions rather than building as one blob:
-1. **Build a profile from a pasted LinkedIn/Indeed profile URL**,
-   alongside (not instead of) today's PDF/DOCX/pasted-text résumé intake.
-2. **An onboarding question**: is the user open to immediate/general work
-   in addition to their target career track?
-3. **If yes, a second parallel search+apply track** for general roles,
-   running alongside the main career-track search — with its own
-   generated general-purpose resume and its own Approve/Decline gate per
-   D2 (this does not relax the human-in-the-loop requirement; it just
-   doubles the number of things the user gets asked to review).
-Real open question before scoping further: does running two tracks at
-once make each individual shortlist noisier/harder to review, or does the
-existing per-job Approve/Decline gate already contain that risk? Worth a
-brainstorming pass before implementation, not a quick bolt-on.
+Raised by the user 2026-08-31, scoped 2026-09-01. Three separable pieces,
+decided independently:
+
+### 14a. Profile import from a public LinkedIn/Indeed profile URL
+
+**Decided**: fetch the user-supplied public profile URL directly via
+Camoufox (already a dependency, used unauthenticated — no login,
+no credential storage), extract the page's visible profile text, and run
+it through the *existing* `resumeParsing.ts` `parseResumeText` pipeline
+unchanged (same strict-JSON-schema `candidateProfiles` extraction Phase 2
+already uses for pasted résumé text) — this is purely a new *text source*,
+not a new profile format.
+
+**Explicit risk accepted by the user, flagged before building**: this
+uses Camoufox's fingerprint-evasion specifically to get past LinkedIn's
+bot-detection on a page LinkedIn does not want scraped, which is the same
+category of action this project deliberately declined against Adzuna in
+Phase 10 (see DECISIONS.md's update note there). The user's stated
+reasoning — no login, own public profile, personal non-commercial use —
+is understood but doesn't remove the ToS exposure; this is a conscious
+exception to that earlier precedent, not a reversal of it. Scope this
+narrowly: single on-demand profile fetch per user request, not a crawler,
+not run on a schedule, no caching/redistribution of the fetched page.
+
+- [ ] New `server/profileImport/linkedin.ts` (naming TBD — generalize for
+  Indeed too): `isSupportedProfileUrl()` allowlist (LinkedIn/Indeed
+  profile-page hostnames only, mirroring `isGreenhouseApplyUrl`'s
+  pattern), `fetchPublicProfileText()` (Camoufox navigate + extract
+  visible text, no login flow, no cookie/session persistence).
+- [ ] Bot: accept a pasted profile URL anywhere the résumé step currently
+  accepts a file/pasted text; route into the new fetch path, then into
+  the same `parseResumeText` call already used today.
+- [ ] Handle fetch failure (page structure changed, profile private,
+  bot-detection triggered anyway) by falling back to asking for a
+  pasted-text/file résumé — never fail onboarding outright.
+- [ ] Tests: URL-allowlist logic (pure, like `isGreenhouseApplyUrl`'s
+  tests) — no live network calls in the test suite, consistent with
+  every other I/O-touching feature in this codebase.
+
+### 14b. Onboarding question: open to immediate/general work?
+
+**Decided**: added as a new onboarding step after radius (or answerable
+later via a command, e.g. `/generalwork on`/`/generalwork off`, for users
+who already finished onboarding before this shipped). Answer is stored
+per-user (new `searchSettings` boolean, e.g. `generalWorkEnabled`) — it
+does not by itself trigger any search; it only unlocks 14c's command.
+
+- [ ] Schema: `generalWorkEnabled` boolean column on `search_settings`,
+  default `false`.
+- [ ] Onboarding step + standalone toggle command, following the existing
+  `planTextStep`/button-quick-pick patterns from Phase 2/8b.
+
+### 14c. Parallel general-work track — fully separate, on request only
+
+**Decided** (not interleaved into the daily main-track message stream,
+to avoid the noise risk flagged 2026-08-31): a new `/generalwork` command
+that, only when explicitly invoked, runs a *separate* search against a
+broad set of common general-labor/entry-level titles (not the user's
+`targetTitles`), scores/shortlists through the same existing pipeline,
+and sends its own Approve/Decline cards — completely independent of the
+scheduled daily run for the main career track. D2's human-in-the-loop
+gate applies identically; this only adds a second thing the user can ask
+for, never a second thing that fires without being asked.
+
+- [ ] A general-purpose tailored resume: reuse
+  `generateTailoredMaterials`/`buildTailoredResumePdf` as-is (both are
+  already job-agnostic pure functions) — no new document-generation code
+  needed, just a different job/title input.
+- [ ] `runGeneralWorkSearchForUser()` in `telegramBot/jobSearch.ts`,
+  mirroring `runJobSearchForUser()` but against a fixed general-titles
+  list instead of `searchSettings.targetTitles`; still respects the
+  user's city/radius.
+- [ ] Wire `/generalwork` into `handler.ts`'s command routing, gated on
+  `generalWorkEnabled` (nudge to enable it via `/generalwork on` if not).
+- [ ] Applications from this track need to be distinguishable from
+  main-track ones (for `applicationFlow`/dedup correctness) — likely a
+  `track` column (`"career" | "general"`) on `applications` rather than
+  inferring it after the fact.
+- [ ] Tests: `runGeneralWorkSearchForUser`'s title-list logic and the
+  `track` dedup/filtering behavior, following the existing pure-logic
+  test pattern.
+
+Not yet built — this is the scoped plan, ready to implement in order
+14b → 14a → 14c (settings/schema first since both other pieces depend on
+it, then profile import, then the track itself, which depends on both).
 
 ## Phase 9 — Retire or shrink the web dashboard
 

@@ -49,7 +49,8 @@ const SYSTEM_PROMPT = `You tailor a candidate's real resume content and write a 
 
 Hard rules:
 - Use ONLY facts present in the candidate profile provided below (employers, titles, dates, skills, education). Never invent or infer licensure, certifications, work authorization, years of experience, or achievements not stated.
-- Reference experience entries only by the index they appear at in the profile — do not add, remove, merge, or reorder entries; only rewrite/select bullets within each.
+- Reference experience entries only by the index they appear at in the profile — do not merge, invent, or reorder entries; only rewrite/select bullets within each.
+- Omit an experience entry from experienceBullets entirely if it is not relevant to this job — a candidate profile may deliberately include experience irrelevant to the roles they're now targeting, and this document must not surface it. Do not include an entry "just in case."
 - Only list skills that are copied verbatim from the profile's skills.
 - Do not exaggerate seniority or scope beyond what the profile states.
 - If the job appears to require something the profile doesn't establish, note it in gapsToMention instead of glossing over it or omitting it silently.
@@ -120,6 +121,21 @@ export async function generateTailoredMaterials(input: {
   };
 }
 
+/**
+ * Only entries the model chose to feature (present in experienceBullets)
+ * get rendered — that's what makes an irrelevant entry actually get
+ * dropped instead of appearing with its original, untailored bullets.
+ * Falls back to every entry, in original order, only if the model returned
+ * no selections at all (an LLM/parsing failure), so a real failure can't
+ * silently produce an empty resume.
+ */
+export function selectFeaturedExperienceIndexes(experienceCount: number, experienceBullets: Array<{ experienceIndex: number }>): number[] {
+  const allIndexes = Array.from({ length: experienceCount }, (_, index) => index);
+  if (!experienceBullets.length) return allIndexes;
+  const featured = new Set(experienceBullets.map(entry => entry.experienceIndex));
+  return allIndexes.filter(index => featured.has(index));
+}
+
 function newPdfDoc(): PDFKit.PDFDocument {
   return new PDFDocument({ margin: 54, size: "LETTER" });
 }
@@ -163,10 +179,13 @@ export async function buildTailoredResumePdf(profile: ProfileForTailoring, mater
     doc.moveDown();
   }
 
-  if (profile.experience.length) {
+  const featuredIndexes = selectFeaturedExperienceIndexes(profile.experience.length, materials.experienceBullets);
+
+  if (featuredIndexes.length) {
     doc.fontSize(13).font("Helvetica-Bold").text("Experience");
     doc.moveDown(0.3);
-    profile.experience.forEach((entry, index) => {
+    featuredIndexes.forEach(index => {
+      const entry = profile.experience[index];
       const title = String(entry.title ?? "");
       const employer = String(entry.employer ?? "");
       const period = String(entry.period ?? "");

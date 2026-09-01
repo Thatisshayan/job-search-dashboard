@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { generateTailoredMaterials, buildTailoredResumePdf, buildCoverLetterPdf } from "./documentTailoring";
+import { generateTailoredMaterials, buildTailoredResumePdf, buildCoverLetterPdf, selectFeaturedExperienceIndexes } from "./documentTailoring";
 
 const invokeLLM = vi.fn();
 vi.mock("./_core/llm", () => ({ invokeLLM: (...args: unknown[]) => invokeLLM(...args) }));
@@ -71,9 +71,28 @@ describe("PDF generation", () => {
     expect(buffer.length).toBeGreaterThan(500);
   });
 
+
   it("builds a real PDF cover letter buffer", async () => {
     const buffer = await buildCoverLetterPdf(profile, job, materials);
     expect(buffer.subarray(0, 4).toString()).toBe("%PDF");
     expect(buffer.length).toBeGreaterThan(500);
+  });
+});
+
+describe("selectFeaturedExperienceIndexes", () => {
+  it("keeps only entries the model featured, dropping ones it left out as irrelevant", () => {
+    // index 1 (e.g. an unrelated prior career) deliberately absent from experienceBullets.
+    const result = selectFeaturedExperienceIndexes(3, [{ experienceIndex: 0 }, { experienceIndex: 2 }]);
+    expect(result).toEqual([0, 2]);
+  });
+
+  it("preserves original profile order regardless of experienceBullets order", () => {
+    const result = selectFeaturedExperienceIndexes(3, [{ experienceIndex: 2 }, { experienceIndex: 0 }]);
+    expect(result).toEqual([0, 2]);
+  });
+
+  it("falls back to every entry if the model returned no selections at all", () => {
+    const result = selectFeaturedExperienceIndexes(2, []);
+    expect(result).toEqual([0, 1]);
   });
 });

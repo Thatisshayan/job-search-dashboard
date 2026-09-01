@@ -105,14 +105,27 @@ release-phase mechanism becomes available.
 - [x] `verifiedListingImport.ts` and `routers.ts`'s `previewScore` both now pass the caller's real `searchSettings` (`targetTitles`/`city`/`radiusKm`) into `scoreJob` instead of relying on hardcoded defaults.
 - [x] `scoring.test.ts` rewritten: proves the engine scores a non-construction role (backend engineer) identically to a construction one, plus explicit tests for the radius-vs-text-fallback precedence and the province-name false-positive fix.
 
-**Known remaining gap, not in this phase's scope:** `findVerifiedSkillMatches` in
-`server/verifiedListingImport.ts` still matches resume skills against a hardcoded
-construction-specific regex pattern list (`verifiedSkillPatterns`). This means
-`resumeSkillMatch` scoring is still construction-biased even though title/location
-matching is now generic. Generalizing this properly likely needs an LLM-based
-skill-match step (compare the parsed `candidateProfiles.skills` against a job
-description) rather than a regex list — worth its own phase/decision rather than a
-quick fix bolted onto this one.
+**Gap closed 2026-09-01** (raised directly by the user: "is it only focusing on
+construction still??"): `findVerifiedSkillMatches` in `server/verifiedListingImport.ts`
+was still matching every job's description against a hardcoded 10-entry
+construction/PM keyword list (`verifiedSkillPatterns` — "blueprints", "subcontractors",
+"MS Project", etc.), completely independent of the candidate's actual parsed skills.
+Since this fed `resumeSkillMatch`, worth up to 25 of ~100 scoring points (the single
+largest component), every job for every candidate — regardless of track — was partly
+scored on whether its posting happened to contain construction jargon. Fixed:
+`findVerifiedSkillMatches(description, candidateSkills)` now takes the candidate's own
+flattened `candidateProfiles.skills` and does a case-insensitive, word-boundary-guarded
+whole-phrase match against the description — no LLM call needed (kept as a pure,
+free, synchronous function like `matchTitle()`/`isWithinTargetRadius()` from earlier in
+this phase, since it runs on every job in every import batch). Real limitation, accepted:
+whole-phrase matching under-matches multi-word "soft" skill phrasing (a candidate's
+"subcontractor management" won't literally appear in a posting that says
+"subcontractors") — this is a symmetric weakness across every domain, not a
+construction-specific bias, so it doesn't reintroduce the problem being fixed.
+`verifiedListingImport.test.ts` rewritten to prove matching now works for a
+non-construction skill set (Kubernetes/PostgreSQL) exactly like a construction one,
+plus a word-boundary regression test (a skill named "Go" no longer false-matches
+inside "background"). `pnpm check`/`test` clean (101 tests, up from 98).
 
 ## Phase 4 — Real job discovery via legitimate APIs ✅ done and verified live
 

@@ -36,45 +36,35 @@ type ImportedScore = {
   score: ScoreResult;
 };
 
-const verifiedSkillPatterns: Array<{ skill: string; patterns: RegExp[] }> = [
-  { skill: "MS Project", patterns: [/\bms project\b/i] },
-  {
-    skill: "multi-site scheduling",
-    patterns: [
-      /\bconstruction schedules?\b/i,
-      /\bschedules? and milestones?\b/i,
-      /\bschedule progress\b/i,
-    ],
-  },
-  {
-    skill: "budget tracking",
-    patterns: [/\bmanage budgets?\b/i, /\bbudget estimates?\b/i],
-  },
-  {
-    skill: "drawing review",
-    patterns: [/\bblueprints?\b/i, /\bdrawings?\b/i, /\bCAD\/CADD\b/i],
-  },
-  { skill: "scope documentation", patterns: [/\bproject specifications?\b/i] },
-  { skill: "subcontractor management", patterns: [/\bsubcontractors?\b/i] },
-  { skill: "trade scheduling", patterns: [/\btrade subcontractors?\b/i] },
-  {
-    skill: "contract negotiation",
-    patterns: [/\bcontracts?\b/i, /\bcontractual agreements?\b/i],
-  },
-  { skill: "quality control", patterns: [/\bquality control\b/i] },
-  { skill: "client communication", patterns: [/\bconsult clients?\b/i] },
-];
-
 export function getTorontoDateKey(date = new Date()) {
   return getLocalDateKey("America/Toronto", date);
 }
 
-export function findVerifiedSkillMatches(description: string) {
-  return verifiedSkillPatterns
-    .filter(({ patterns }) =>
-      patterns.some(pattern => pattern.test(description))
-    )
-    .map(({ skill }) => skill);
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Matches the candidate's own real, parsed skills against a job description.
+ * Replaces an earlier hardcoded, construction-specific keyword list
+ * ("blueprints", "subcontractors", "MS Project", etc.) that ignored the
+ * actual candidate entirely and matched purely against the job description
+ * text — meaning every job's "resume skill match" score component (up to 25
+ * of ~100 total scoring points, scoring.ts's SCORE_WEIGHTS.resumeSkillMatch)
+ * was really "does this posting mention construction/PM jargon," regardless
+ * of the candidate's real background or chosen track. Flagged as a known gap
+ * in ROADMAP.md's Phase 3 notes; this closes it. A skill "matches" if it (or
+ * its full phrase, for a multi-word skill) appears as a whole word/phrase in
+ * the description — case-insensitive, word-boundary guarded so a short skill
+ * like "Go" or "R" can't false-match inside an unrelated word.
+ */
+export function findVerifiedSkillMatches(description: string, candidateSkills: string[]): string[] {
+  return candidateSkills.filter(skill => {
+    const trimmed = skill.trim();
+    if (!trimmed) return false;
+    const pattern = new RegExp(`\\b${escapeRegExp(trimmed)}\\b`, "i");
+    return pattern.test(description);
+  });
 }
 
 function listingFingerprint(listing: VerifiedListing) {
@@ -145,6 +135,8 @@ export async function importVerifiedListingBatch(
     if (listings.some(listing => listing.sourceName !== source.name))
       throw new Error("Each import batch must use one configured source");
 
+    const candidateSkills = Object.values(profile[0].skills ?? {}).flat();
+
     let duplicatesMerged = 0;
     const newJobIds = new Set<number>();
     const importedScores: ImportedScore[] = [];
@@ -158,7 +150,7 @@ export async function importVerifiedListingBatch(
           .limit(1)
       )[0];
       if (existing) duplicatesMerged += 1;
-      const skillMatches = findVerifiedSkillMatches(listing.description);
+      const skillMatches = findVerifiedSkillMatches(listing.description, candidateSkills);
       const score = scoreJob({
         title: listing.title,
         description: listing.description,

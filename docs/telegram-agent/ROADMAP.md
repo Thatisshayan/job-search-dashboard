@@ -17,6 +17,20 @@ guess.
 - [x] Document the new env vars in `.env.example` and `README.md`
 - [x] Get a real `OPENROUTER_API_KEY` and smoke-test `invokeLLM` end-to-end — confirmed working against `openai/gpt-4o-mini` on 2026-08-31
 
+**Update 2026-09-01**: `DEFAULT_OPENROUTER_MODEL` changed from
+`openai/gpt-4o-mini` to `nvidia/nemotron-3-super-120b-a12b:free`, found
+broken during live testing — this OpenRouter account's privacy setting
+(`openrouter.ai/settings/privacy`) restricts requests to the `nvidia`
+provider only, and gpt-4o-mini is served by azure/openai, so every LLM
+call (résumé parsing, tailoring, everything) was failing 404 in
+production. Verified via OpenRouter's `/models`/`/models/{id}/endpoints`
+APIs which model is both actually served by a provider literally named
+`Nvidia` and supports `structured_outputs` (required everywhere in this
+codebase's strict JSON-schema calls) — see `llm.ts`'s comment for the
+full reasoning. Caveat: it's a free-tier model with OpenRouter's usual
+rate limits; if that becomes a real problem, loosening the account's
+allowed-providers setting is the other available fix.
+
 **Not touched, intentionally:** `server/_core/storageProxy.ts`, `voiceTranscription.ts`,
 `notification.ts`, `map.ts`, `heartbeat.ts`, `imageGeneration.ts`, `dataApi.ts` —
 these are all separate, currently-unused Manus scaffold utilities. Decoupling

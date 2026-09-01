@@ -224,7 +224,21 @@ const assertApiKey = () => {
 // OpenRouter rejects a request with no `model`, unlike some proxies that pick
 // a default server-side. Callers can pass this explicitly, or omit `model`
 // and rely on this fallback via `params.model ?? DEFAULT_OPENROUTER_MODEL`.
-export const DEFAULT_OPENROUTER_MODEL = "openai/gpt-4o-mini";
+//
+// Changed 2026-09-01: this account's OpenRouter privacy setting restricts
+// requests to the "nvidia" inference provider only (openrouter.ai/settings/
+// privacy) — gpt-4o-mini is served by azure/openai, so every call was
+// failing 404 in production. Verified via OpenRouter's public /models and
+// /models/{id}/endpoints APIs that of NVIDIA's own nemotron models, only
+// nemotron-3-super-120b-a12b:free is actually served by a provider literally
+// named "Nvidia" (the paid nvidia/nemotron-* slugs route through third-party
+// hosts like DeepInfra/CoreWeave instead, which the privacy setting also
+// blocks) and supports structured_outputs/response_format, which every LLM
+// call in this codebase (resumeParsing.ts, documentTailoring.ts) requires.
+// Caveat: this is a free-tier model with OpenRouter's usual rate limits —
+// if that becomes a real problem under load, the other fix is loosening the
+// account's allowed-providers setting instead of picking a different model.
+export const DEFAULT_OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 
 const normalizeResponseFormat = ({
   responseFormat,

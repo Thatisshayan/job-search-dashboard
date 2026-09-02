@@ -618,15 +618,43 @@ choice** (buttons) → **recurring time** (only if yes) → finalize.
   as "already handled" once `telegramMessageId` is actually set.
 - [x] `pnpm check`/`test` clean (98 tests passing, up from 88).
 
-**Known gap, not built this pass:** there's no bot command to change the
-recurring on/off/time choice after onboarding finishes (unlike
-`/generalwork`'s on/off/status pattern) — a user who declines daily checks,
-or wants a different time, has no way to change that without a fresh
-`/start`. Worth a `/schedule` command later if this turns out to matter.
+**Live-tested 2026-09-01** against the real Railway deployment — a full
+`/start` → career track → radius/recurring cycle, and a second `/start` →
+general track → "build one for me" cycle. Two real bugs found and fixed:
 
-**Not yet live-tested**: no real `/start` → track choice → resume-build (or
-ready) → recurring-yes-with-time cycle has been run against a real
-Telegram chat yet.
+1. **The resume-build step silently discarded an uploaded file.**
+   `handleIncomingMessage`'s `awaiting_resume_build` branch only ever checked
+   `message.text`, so uploading a real PDF/DOCX at that step (a natural
+   thing to do even after choosing "build one for me") hit `!message.text`
+   and got the same unhelpful "tell me a bit more" reply every time, with
+   the file completely ignored — confirmed live, it happened twice in a row
+   before the user gave up and pasted raw text instead. Fixed: a document or
+   supported profile-URL at this step is now routed through the same
+   `handleResumeUpload` path `awaiting_resume` already uses.
+2. **No way to fix a mistake after onboarding finishes.** Live-tested: the
+   user tried typing a corrected city ("Toronto") and `/edit near Toronto`
+   after onboarding completed, and both got the generic idle fallback
+   ("You're all set for now — nothing to update here yet.") — there was
+   never a real command for this, exactly the gap this file's previous
+   revision flagged as "known, not built." Fixed: a new `/edit` command
+   (`handleEditCommand`) restarts the settings-only part of onboarding
+   (titles/location → radius → recurring), leaving the saved résumé/profile
+   and track choice untouched, reusing the same `planTextStep` transitions
+   built for original onboarding. Also fixed a related honesty bug this
+   surfaced: the "no daily checks" confirmation claimed you could
+   "search on demand any time by sending a message," which was never true
+   (an idle-state plain message just hits the same fallback) — reworded to
+   correctly point at `/edit`, which now actually re-runs a search on
+   finishing.
+
+Not a bug, just user input: one run's summary read "I'll match you against:
+Construction, near To root (within 25 km)" — both values are exactly what
+the user typed (a single-word title, and a likely mobile-autocorrect typo
+for "Toronto"); the bot doesn't editorialize onboarding answers, it echoes
+them verbatim, which is why /edit exists now instead of silent guessing.
+
+`pnpm check`/`test` clean (101 tests). `/edit` added to `BOT_COMMANDS`
+(`server/telegram.ts`) so it's in `/help` and Telegram's own command menu.
 
 ## Phase 9 — Retire or shrink the web dashboard
 

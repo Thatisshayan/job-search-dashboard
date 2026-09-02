@@ -131,6 +131,7 @@ export const BOT_COMMANDS: Array<{ command: string; description: string }> = [
   { command: "unwatch", description: "Stop tracking a company you previously /watch'd" },
   { command: "watching", description: "List the companies you're currently watching" },
   { command: "generalwork", description: "General-work matching: /generalwork on/off/status, or run to search now (separate from your main search)" },
+  { command: "edit", description: "Update your target roles/location, radius, and daily-check schedule without starting over" },
   { command: "help", description: "Show this list of commands" },
 ];
 

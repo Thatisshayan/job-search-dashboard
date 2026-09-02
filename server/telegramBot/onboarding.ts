@@ -21,7 +21,7 @@ function finalizeReply(context: Record<string, unknown>): string {
   const summary = summarizeSettings(context);
   const scheduleNote = context.dailyNotificationEnabled
     ? `I'll check automatically every day at ${context.scheduledTime} and message you here if anything new turns up.`
-    : "I won't check automatically — search on demand any time by sending a message, or turn on daily checks later.";
+    : "I won't check automatically — say /edit any time to update your search (or just re-confirm it) and I'll search again then.";
   return `${summary}\n\nSearching for matching roles now — one moment…\n\n${scheduleNote}\n\nTip: if there's a specific company you want tracked closely, send /watch <company> (e.g. /watch acme, or paste their careers page link) and I'll include their own postings too.`;
 }
 

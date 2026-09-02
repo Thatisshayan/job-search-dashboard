@@ -1,5 +1,5 @@
 import { BOT_COMMANDS, sendButtonMessage, sendPlainMessage } from "../telegram";
-import { getConversation, getOrCreateUserForChat, saveCandidateProfile, saveSearchSettingsFromOnboarding, setConversationState, startConversation } from "./db";
+import { getConversation, getOrCreateUserForChat, getSearchSettingsForUser, saveCandidateProfile, saveSearchSettingsFromOnboarding, setConversationState, startConversation } from "./db";
 import { runSearchAndNotify } from "./notify";
 import { planTextStep } from "./onboarding";
 import { downloadAndParseResume, isSupportedResumeMime, parseResumeText } from "./resumeParsing";
@@ -74,6 +74,12 @@ export async function handleIncomingMessage(message: TelegramIncomingMessage): P
     return;
   }
 
+  if (command === "/edit") {
+    const user = await getOrCreateUserForChat(chatId, message.chat.username ?? "");
+    await handleEditCommand(chatId, user.id);
+    return;
+  }
+
   const conversation = await getConversation(chatId);
   if (!conversation) {
     await sendPlainMessage(chatId, "Send /start to begin.");
@@ -86,8 +92,17 @@ export async function handleIncomingMessage(message: TelegramIncomingMessage): P
   }
 
   if (conversation.state === "awaiting_resume_build") {
+    // A user who chose "build one for me" but then uploads a real file or
+    // pastes a profile link clearly does have something to work from — treat
+    // it exactly like the "ready" path instead of silently discarding it
+    // with a generic "tell me more" (a real bug: this previously ignored
+    // message.document entirely, since it only ever checked message.text).
+    if (message.document || (message.text && isSupportedProfileUrl(message.text.trim()))) {
+      await handleResumeUpload(chatId, conversation.userId, message, conversation.context ?? {});
+      return;
+    }
     if (!message.text || message.text.trim().length < MIN_BUILD_INTAKE_CHARS) {
-      await sendPlainMessage(chatId, "Tell me a bit more — your current or most recent job title, your experience, and your top skills.");
+      await sendPlainMessage(chatId, "Tell me a bit more — your current or most recent job title, your experience, and your top skills — or send your resume as a file if you have one after all.");
       return;
     }
     await handleResumeBuildIntake(chatId, conversation.userId, message.text.trim(), conversation.context ?? {});
@@ -165,6 +180,31 @@ export async function advanceOnboardingStep(chatId: string, conversation: BotCon
   }
 
   await sendPlainMessage(chatId, result.reply);
+}
+
+/**
+ * Restarts the settings-only portion of onboarding (titles/location/radius/
+ * recurring schedule) without re-asking track choice or resume — those are
+ * left untouched. Added after live testing showed a real gap: once
+ * onboarding finishes, there was no way to correct a typo'd city or change
+ * the schedule short of re-running /start from scratch (which would also
+ * force a fresh resume submission).
+ */
+async function handleEditCommand(chatId: string, userId: number): Promise<void> {
+  const settings = await getSearchSettingsForUser(userId);
+  if (!settings) {
+    await sendPlainMessage(chatId, "Finish onboarding first (send /start) before editing your settings.");
+    return;
+  }
+
+  if (settings.track === "general") {
+    await setConversationState(chatId, "awaiting_location", { track: "general", targetTitles: [] });
+    await sendPlainMessage(chatId, `Let's update your search settings. What city or region should I search near? (currently "${settings.city}")`);
+    return;
+  }
+
+  await setConversationState(chatId, "awaiting_target_titles", { track: "career" });
+  await sendPlainMessage(chatId, `Let's update your search settings. What roles are you targeting? List one or more, separated by commas. (currently: ${settings.targetTitles.join(", ") || "none set"})`);
 }
 
 async function handleResumeUpload(chatId: string, userId: number, message: TelegramIncomingMessage, context: Record<string, unknown>): Promise<void> {

@@ -125,18 +125,37 @@ export async function setTelegramWebhook(url: string) {
  * called once at boot, see server/_core/index.ts) and to generate /help's
  * reply text (telegramBot/handler.ts), so the two can't drift apart.
  */
-export const BOT_COMMANDS: Array<{ command: string; description: string }> = [
-  { command: "start", description: "Begin or restart onboarding: send your resume, target roles, location, and radius" },
-  { command: "watch", description: "Track a specific company's Greenhouse job board, e.g. /watch acme or a careers-page link" },
-  { command: "unwatch", description: "Stop tracking a company you previously /watch'd" },
+/**
+ * `description` is what Telegram's own "/" autocomplete menu shows (its API
+ * caps this at 256 characters and renders it as a single line, so it's kept
+ * short); `usage` is optional extra detail — exact syntax, subcommands —
+ * shown only in /help's fuller text (handler.ts's HELP_TEXT), not sent to
+ * Telegram at all.
+ */
+export const BOT_COMMANDS: Array<{ command: string; description: string; usage?: string }> = [
+  { command: "start", description: "Begin or restart onboarding from scratch" },
+  {
+    command: "watch",
+    description: "Track a specific company's Greenhouse job board",
+    usage: "/watch <company or careers-page link> — e.g. /watch acme, or /watch https://boards.greenhouse.io/acme",
+  },
+  { command: "unwatch", description: "Stop tracking a company you previously /watch'd", usage: "/unwatch <company>" },
   { command: "watching", description: "List the companies you're currently watching" },
-  { command: "generalwork", description: "General-work matching: /generalwork on/off/status, or run to search now (separate from your main search)" },
-  { command: "edit", description: "Update your target roles/location, radius, and daily-check schedule without starting over" },
+  {
+    command: "generalwork",
+    description: "General-work matching, separate from your main search",
+    usage: "/generalwork on — enable\n/generalwork off — disable\n/generalwork status — check if it's on\n/generalwork run — search now (only once enabled)",
+  },
+  {
+    command: "edit",
+    description: "Update your search, track, or resume without starting over",
+    usage: "/edit — update roles/location, radius, and daily-check schedule\n/edit track — switch between immediate/general work and career-focused work\n/edit resume — replace your resume (upload, paste, paste a profile link, or have me build one)",
+  },
   { command: "help", description: "Show this list of commands" },
 ];
 
 export async function setBotCommands(): Promise<void> {
-  await telegramApi<boolean>("setMyCommands", { commands: BOT_COMMANDS });
+  await telegramApi<boolean>("setMyCommands", { commands: BOT_COMMANDS.map(({ command, description }) => ({ command, description })) });
 }
 
 export async function sendApprovalCard(input: {

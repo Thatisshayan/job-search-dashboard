@@ -656,6 +656,21 @@ them verbatim, which is why /edit exists now instead of silent guessing.
 `pnpm check`/`test` clean (101 tests). `/edit` added to `BOT_COMMANDS`
 (`server/telegram.ts`) so it's in `/help` and Telegram's own command menu.
 
+**Extended same day, on request**: `/edit` now also covers track and resume,
+not just settings — `/edit track` re-enters `awaiting_track_choice` (which
+naturally flows back through resume choice and settings, same as first-time
+onboarding); `/edit resume` re-enters `awaiting_resume_choice` while keeping
+the current track, then flows into settings once the new resume lands. Both
+reuse the exact same state-machine transitions and button helpers onboarding
+itself uses (`sendTrackChoiceButtons`/`sendResumeChoiceButtons`, factored out
+of `advanceOnboardingStep` so `/start`/`/edit` can't drift apart from it).
+Also, per an explicit request to properly document every command:
+`BOT_COMMANDS` (`server/telegram.ts`) now carries an optional `usage` field
+— full syntax/subcommands — shown only in `/help`'s fuller text, kept out of
+Telegram's own "/" menu entries (its API renders `description` as a single
+short line, so that field stays short; `usage` is never sent to Telegram at
+all). `pnpm check`/`test` clean (101 tests).
+
 ## Phase 9 — Retire or shrink the web dashboard
 
 - [ ] Decide: keep `client/` as a thin read-only admin/debug view, or remove it once the bot covers the full loop

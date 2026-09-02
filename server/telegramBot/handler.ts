@@ -29,10 +29,28 @@ const MIN_BUILD_INTAKE_CHARS = 20; // resume-build Q&A intake is guided, so need
  * Telegram's "/" autocomplete menu via setBotCommands at boot) so the two
  * can never list different commands.
  */
-export const HELP_TEXT = `Here's everything I can do:\n\n${BOT_COMMANDS.map(({ command, description }) => `/${command} — ${description}`).join("\n")}\n\nDuring onboarding, just reply with text (or tap a button when I offer one) — no special command needed for that part. Approve/Decline/Confirm on job cards are buttons on the message itself, not commands.`;
+export const HELP_TEXT = `Here's everything I can do:\n\n${BOT_COMMANDS.map(({ command, description, usage }) => `/${command} — ${description}${usage ? `\n${usage}` : ""}`).join("\n\n")}\n\nDuring onboarding, just reply with text (or tap a button when I offer one) — no special command needed for that part. Approve/Decline/Confirm on job cards are buttons on the message itself, not commands.`;
 
 function stripBotMention(command: string): string {
   return command.replace(/@\S+$/, "");
+}
+
+async function sendTrackChoiceButtons(chatId: string, text: string): Promise<void> {
+  await sendButtonMessage(chatId, text, [
+    [
+      { text: "Immediate/general work", callback_data: "obstep:track:general" },
+      { text: "Career work", callback_data: "obstep:track:career" },
+    ],
+  ]);
+}
+
+async function sendResumeChoiceButtons(chatId: string, text: string): Promise<void> {
+  await sendButtonMessage(chatId, text, [
+    [
+      { text: "I have one ready", callback_data: "obstep:resume:ready" },
+      { text: "Build one for me", callback_data: "obstep:resume:build" },
+    ],
+  ]);
 }
 
 export async function handleIncomingMessage(message: TelegramIncomingMessage): Promise<void> {
@@ -43,12 +61,7 @@ export async function handleIncomingMessage(message: TelegramIncomingMessage): P
   if (command === "/start") {
     const user = await getOrCreateUserForChat(chatId, message.chat.username ?? "");
     await startConversation(user.id, chatId);
-    await sendButtonMessage(chatId, WELCOME_TEXT, [
-      [
-        { text: "Immediate/general work", callback_data: "obstep:track:general" },
-        { text: "Career work", callback_data: "obstep:track:career" },
-      ],
-    ]);
+    await sendTrackChoiceButtons(chatId, WELCOME_TEXT);
     return;
   }
 
@@ -74,9 +87,10 @@ export async function handleIncomingMessage(message: TelegramIncomingMessage): P
     return;
   }
 
-  if (command === "/edit") {
+  const editCommand = message.text ? /^\/edit(?:@\S+)?(?:\s+(.*))?$/.exec(message.text.trim()) : null;
+  if (editCommand) {
     const user = await getOrCreateUserForChat(chatId, message.chat.username ?? "");
-    await handleEditCommand(chatId, user.id);
+    await handleEditCommand(chatId, user.id, (editCommand[1] ?? "").trim().toLowerCase());
     return;
   }
 
@@ -160,12 +174,7 @@ export async function advanceOnboardingStep(chatId: string, conversation: BotCon
   }
 
   if (result.nextState === "awaiting_resume_choice") {
-    await sendButtonMessage(chatId, result.reply, [
-      [
-        { text: "I have one ready", callback_data: "obstep:resume:ready" },
-        { text: "Build one for me", callback_data: "obstep:resume:build" },
-      ],
-    ]);
+    await sendResumeChoiceButtons(chatId, result.reply);
     return;
   }
 
@@ -182,18 +191,43 @@ export async function advanceOnboardingStep(chatId: string, conversation: BotCon
   await sendPlainMessage(chatId, result.reply);
 }
 
+const EDIT_USAGE =
+  'Usage:\n/edit — update roles/location, radius, and daily-check schedule\n/edit track — switch between immediate/general work and career-focused work\n/edit resume — replace your resume (upload one, paste it, paste a profile link, or have me build one)';
+
 /**
- * Restarts the settings-only portion of onboarding (titles/location/radius/
- * recurring schedule) without re-asking track choice or resume — those are
- * left untouched. Added after live testing showed a real gap: once
- * onboarding finishes, there was no way to correct a typo'd city or change
- * the schedule short of re-running /start from scratch (which would also
- * force a fresh resume submission).
+ * Re-enters onboarding at a specific point without forcing a full /start
+ * over. Added after live testing showed a real gap: once onboarding
+ * finished, there was no way to correct a typo'd city or change anything
+ * short of re-running /start from scratch. Three forms, each re-using the
+ * exact same state-machine transitions onboarding itself uses:
+ *  - /edit           → titles/location → radius → recurring schedule
+ *  - /edit track     → track choice (career vs. immediate/general), which
+ *                      then naturally flows into resume choice and settings
+ *                      again, same as first-time onboarding
+ *  - /edit resume    → resume choice only, keeping the current track, then
+ *                      flows into settings again once the new resume lands
  */
-async function handleEditCommand(chatId: string, userId: number): Promise<void> {
+async function handleEditCommand(chatId: string, userId: number, subcommand: string): Promise<void> {
   const settings = await getSearchSettingsForUser(userId);
   if (!settings) {
-    await sendPlainMessage(chatId, "Finish onboarding first (send /start) before editing your settings.");
+    await sendPlainMessage(chatId, "Finish onboarding first (send /start) before editing anything.");
+    return;
+  }
+
+  if (subcommand === "track") {
+    await setConversationState(chatId, "awaiting_track_choice", {});
+    await sendTrackChoiceButtons(chatId, `Let's update your track. Currently: ${settings.track === "general" ? "immediate/general work" : "career-focused work"}.\n\nAre you looking for immediate/general work, or career-focused work?`);
+    return;
+  }
+
+  if (subcommand === "resume") {
+    await setConversationState(chatId, "awaiting_resume_choice", { track: settings.track });
+    await sendResumeChoiceButtons(chatId, "Let's update your resume. Do you have a new one ready to share, or would you like help building one?");
+    return;
+  }
+
+  if (subcommand && subcommand !== "settings") {
+    await sendPlainMessage(chatId, EDIT_USAGE);
     return;
   }
 

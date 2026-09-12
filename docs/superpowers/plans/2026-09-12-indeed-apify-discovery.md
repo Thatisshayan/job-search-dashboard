@@ -41,6 +41,15 @@ This changes two things from the plan's original placeholder code below: the act
 and a required `country` field (not `maxItems`), and the output's date field is `postedAt` (not
 `postingDateParsed`) — both already corrected in Tasks 3-4's code below.
 
+**Superseded same day, once a real Apify token became available (see the design spec's updated "Confirmed actor
+shape" section).** A real token let three actors be live-tested: `misceres/indeed-scraper` (this task's original
+pick), `kaix/indeed-scraper`, and `memo23/apify-indeed-cheerio-ppr` (the latter two from links the user found
+independently). `kaix/indeed-scraper` won clearly: 6,170 users vs. 809, 99.8%+ success rate, cheaper pricing (from
+$0.05/1,000 jobs vs. ~$1.49/1,000), a real `id` field, and a genuine direct `apply.url`. `server/jobSearch/
+indeedApify.ts` was switched to it and live-tested end-to-end (20 real Toronto listings, all correctly mapped) —
+see the actual shipped code for the real (nested) input/output shape, which differs from this task's original
+flat placeholder code below.
+
 - [ ] **Step 1: Record this in the design spec**
 
 Append to `docs/superpowers/specs/2026-09-12-indeed-apify-discovery-design.md`, under a new final section:

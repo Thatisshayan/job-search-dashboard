@@ -680,16 +680,23 @@ approved, scoped to Indeed only — not LinkedIn) and
 
 - [x] `server/jobSearch/apifyClient.ts` — generic Apify actor run/poll/fetch client (5-minute poll cap, configurable
   via `APIFY_POLL_CAP_MS`, as a dead-man's-switch, not a "skip this source" policy).
-- [x] `server/jobSearch/indeedApify.ts` — Indeed-specific search + field-mapping (`misceres/indeed-scraper` actor,
-  confirmed via its public Apify Store page), capped at 20 results per title (Apify bills per run/result).
+- [x] `server/jobSearch/indeedApify.ts` — Indeed-specific search + field-mapping. Switched actors the same day
+  once a real Apify token arrived: `misceres/indeed-scraper` (chosen from its public store page only) →
+  `kaix/indeed-scraper` after live-testing it against two other candidates (one user-suggested, plus
+  `memo23/apify-indeed-cheerio-ppr`, also user-suggested) — won on users (6,170 vs. 809), success rate,
+  price (from $0.05/1,000 jobs vs. ~$1.49/1,000), a real per-job `id` (misceres had none), and a genuine direct
+  `apply.url`. Capped at 20 results per title (Apify bills per run/result).
 - [x] Wired into `runJobSearchForUser` (`server/telegramBot/jobSearch.ts`) as a third source block, structurally
   identical to the Adzuna block.
-- [x] `pnpm check`/`test` clean (113 tests, up from 101).
+- [x] `pnpm check`/`test` clean (125 tests, up from 101).
 
 **Known gap, addressed in the next phase:** the same real job can appear via both Indeed and Adzuna/Greenhouse —
 no cross-source dedup yet. See Phase 17.
 
-**Not yet live-tested** against a real Railway deployment with a real Apify token.
+**Live-verified 2026-09-12** end-to-end through the real code (`apifyClient.ts`/`indeedApify.ts`) against a real
+Apify token: a real search for "Backend Engineer" in "Toronto, ON" returned 20 real listings, all correctly mapped
+to `VerifiedListing`. Not yet verified against the actual Railway deployment specifically (token is set there, but
+a real bot-triggered search hasn't been run against production yet).
 
 ## Phase 17 — Cross-source job dedup ✅ built
 

@@ -168,16 +168,23 @@ timing out and skipping) makes the compounding worse than Adzuna's fast REST cal
 
 ## Confirmed actor shape (recorded during implementation, 2026-09-12)
 
-Confirmed via https://apify.com/misceres/indeed-scraper's public store page (no live test call — no Apify API
-token available in the implementing environment). Still published/maintained: 30,516 total users, 2,293 monthly
-users, 99.8% runs succeeded.
+**Superseded same day, once a real Apify token became available.** Initially confirmed via
+https://apify.com/misceres/indeed-scraper's public store page only (no live call possible without a token) — see
+git history for that original note. Once a real token arrived, three candidates were compared with real live test
+calls: `misceres/indeed-scraper` (the original pick), `kaix/indeed-scraper`, and `memo23/apify-indeed-cheerio-ppr`
+(the latter two suggested by the user from links they found independently).
 
-**Input:** `position`, `location`, `country`, `maxItemsPerSearch`, plus unused `startUrls`/`parseCompanyDetails`/
-`saveOnlyUniqueItems`.
+**Chosen: `kaix/indeed-scraper`.** Won on every axis checked: 6,170 total users / 1,460 monthly (vs. memo23's 809
+total / 278 monthly), 99.8%+ recent success rate, cheaper pay-per-event pricing (from $0.05/1,000 jobs, vs.
+memo23's ~$1.49/1,000 results), a real per-job `id` field (misceres had none, forcing a URL fallback for
+`sourceExternalId`), and a genuine direct `apply.url` rather than a tracking redirect. Live-tested end-to-end
+through the actual `apifyClient.ts`/`indeedApify.ts` code (not just the raw API): a real search for "Backend
+Engineer" in "Toronto, ON" returned 20 real listings, all correctly mapped to `VerifiedListing`.
 
-**Output:** `positionName`, `company`, `location`, `description`/`descriptionHTML`, `url`, `postedAt`, `salary`,
-`jobType`, `externalApplyLink`, `rating`/`reviewsCount`. No documented stable `id` field — `url` used as the
-external-id fallback.
+**Confirmed real input schema:** `keyword` (not `position`), `location`, `country` (uppercase 2-letter code, e.g.
+`"CA"` — confirmed by a live 201 response; `misceres`'s guessed schema used lowercase), `maxItems` (0 = unlimited,
+never pass 0 here since this actor bills per result).
 
-If Task 7's live Railway verification (real API token) finds the actual live output differs from this, fix
-`server/jobSearch/indeedApify.ts`'s field mapping then and update this note.
+**Confirmed real output schema (nested, unlike misceres' flat guess):** `id` (real, stable), `title.text`,
+`company.name`, `location.formatted`, `description.text` (also `description.html` available, unused),
+`apply.url` (also mirrored at `urls.apply`), `dates.posted`. Verified directly against live data, not documentation.

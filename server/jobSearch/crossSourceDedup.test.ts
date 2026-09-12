@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { groupByEmployer, normalizeEmployerName, pickMostComplete } from "./crossSourceDedup";
 import type { VerifiedListing } from "../verifiedListingImport";
 
@@ -64,5 +64,45 @@ describe("pickMostComplete", () => {
   it("returns the only listing when the group has one", () => {
     const only = listing();
     expect(pickMostComplete([only])).toBe(only);
+  });
+});
+
+const invokeLLM = vi.fn();
+vi.mock("../_core/llm", () => ({ invokeLLM: (...args: unknown[]) => invokeLLM(...args) }));
+
+import { findDuplicateGroups } from "./crossSourceDedup";
+
+describe("findDuplicateGroups", () => {
+  afterEach(() => {
+    invokeLLM.mockReset();
+  });
+
+  it("returns groups the LLM judges to be the same posting", async () => {
+    const a = listing({ sourceName: "Adzuna", sourceExternalId: "a1", title: "Backend Engineer", employer: "Acme" });
+    const b = listing({ sourceName: "Indeed", sourceExternalId: "b1", title: "Backend Software Engineer", employer: "Acme" });
+    const c = listing({ sourceName: "Indeed", sourceExternalId: "c1", title: "Frontend Engineer", employer: "Acme" });
+
+    invokeLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ duplicatePairs: [["a1", "b1"]] }) } }],
+    });
+
+    const groups = await findDuplicateGroups(new Map([["acme", [a, b, c]]]));
+    expect(groups).toHaveLength(1);
+    expect(groups[0].map(listing => listing.sourceExternalId).sort()).toEqual(["a1", "b1"]);
+  });
+
+  it("skips a group on LLM failure, logging rather than throwing", async () => {
+    const a = listing({ sourceName: "Adzuna", sourceExternalId: "a1", employer: "Acme" });
+    const b = listing({ sourceName: "Indeed", sourceExternalId: "b1", employer: "Acme" });
+    invokeLLM.mockRejectedValueOnce(new Error("OpenRouter timeout"));
+
+    const groups = await findDuplicateGroups(new Map([["acme", [a, b]]]));
+    expect(groups).toEqual([]);
+  });
+
+  it("returns no groups when there are no employer groups to compare", async () => {
+    const groups = await findDuplicateGroups(new Map());
+    expect(groups).toEqual([]);
+    expect(invokeLLM).not.toHaveBeenCalled();
   });
 });

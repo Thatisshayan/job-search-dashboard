@@ -13,6 +13,7 @@ export const ENV = {
   openRouterBaseUrl: process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1",
   adzunaAppId: process.env.ADZUNA_APP_ID ?? "",
   adzunaAppKey: process.env.ADZUNA_APP_KEY ?? "",
+  apifyApiToken: process.env.APIFY_API_TOKEN ?? "",
 };
 
 const requiredEnvSchema = z.object({

@@ -126,17 +126,26 @@ git commit -m "Add optional APIFY_API_TOKEN config for the upcoming Indeed disco
 
 Create `server/jobSearch/apifyClient.test.ts`:
 
+**Correction found during execution:** `ENV` (`server/_core/env.ts`) is a plain object built once at
+module-import time from `process.env` — `vi.stubEnv` after import can't retroactively change
+`ENV.apifyApiToken`. Mock the `env` module directly instead (below), same fix pattern as any test needing to vary
+an `ENV` field per-test.
+
 ```typescript
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const mockEnv = vi.hoisted(() => ({ apifyApiToken: "test-token" }));
+vi.mock("../_core/env", () => ({ ENV: mockEnv }));
+
 import { isApifyConfigured, runApifyActor } from "./apifyClient";
 
 describe("isApifyConfigured", () => {
   afterEach(() => {
-    vi.unstubAllEnvs();
+    mockEnv.apifyApiToken = "test-token";
   });
 
   it("is false when APIFY_API_TOKEN is unset", () => {
-    vi.stubEnv("APIFY_API_TOKEN", "");
+    mockEnv.apifyApiToken = "";
     expect(isApifyConfigured()).toBe(false);
   });
 });
@@ -145,13 +154,12 @@ describe("runApifyActor", () => {
   const fetchMock = vi.fn();
 
   beforeEach(() => {
-    vi.stubEnv("APIFY_API_TOKEN", "test-token");
+    mockEnv.apifyApiToken = "test-token";
     vi.stubGlobal("fetch", fetchMock);
     vi.useFakeTimers();
   });
 
   afterEach(() => {
-    vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.useRealTimers();
     fetchMock.mockReset();
@@ -216,7 +224,7 @@ describe("runApifyActor", () => {
   });
 
   it("throws if APIFY_API_TOKEN is not configured", async () => {
-    vi.stubEnv("APIFY_API_TOKEN", "");
+    mockEnv.apifyApiToken = "";
     await expect(runApifyActor("some/actor", {})).rejects.toThrow("APIFY_API_TOKEN is not configured");
   });
 });

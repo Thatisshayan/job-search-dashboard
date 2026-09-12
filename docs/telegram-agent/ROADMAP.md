@@ -671,6 +671,26 @@ Telegram's own "/" menu entries (its API renders `description` as a single
 short line, so that field stays short; `usage` is never sent to Telegram at
 all). `pnpm check`/`test` clean (101 tests).
 
+## Phase 16 — Indeed discovery via Apify ✅ built
+
+Third automatic discovery source, alongside Adzuna (broad search) and Greenhouse (per-company opt-in). Runs
+automatically for every user's daily search, same as Adzuna. See DECISIONS.md D1's 2026-09-12 update (Apify
+approved, scoped to Indeed only — not LinkedIn) and
+`docs/superpowers/specs/2026-09-12-indeed-apify-discovery-design.md` for the full design.
+
+- [x] `server/jobSearch/apifyClient.ts` — generic Apify actor run/poll/fetch client (5-minute poll cap, configurable
+  via `APIFY_POLL_CAP_MS`, as a dead-man's-switch, not a "skip this source" policy).
+- [x] `server/jobSearch/indeedApify.ts` — Indeed-specific search + field-mapping (`misceres/indeed-scraper` actor,
+  confirmed via its public Apify Store page), capped at 20 results per title (Apify bills per run/result).
+- [x] Wired into `runJobSearchForUser` (`server/telegramBot/jobSearch.ts`) as a third source block, structurally
+  identical to the Adzuna block.
+- [x] `pnpm check`/`test` clean (113 tests, up from 101).
+
+**Known gap, addressed in the next phase:** the same real job can appear via both Indeed and Adzuna/Greenhouse —
+no cross-source dedup yet. See Phase 17.
+
+**Not yet live-tested** against a real Railway deployment with a real Apify token.
+
 ## Phase 9 — Retire or shrink the web dashboard
 
 - [ ] Decide: keep `client/` as a thin read-only admin/debug view, or remove it once the bot covers the full loop

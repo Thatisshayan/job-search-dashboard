@@ -6,11 +6,16 @@ export { isApifyConfigured };
 export const INDEED_SOURCE_NAME = "Indeed";
 
 /**
- * Chosen during implementation research (see docs/superpowers/specs/
- * 2026-09-12-indeed-apify-discovery-design.md, "Confirmed actor shape").
- * Kept as a named constant so swapping actors is a one-line change.
+ * Switched from misceres/indeed-scraper (chosen from its public store page
+ * only, before a real Apify token was available) to kaix/indeed-scraper
+ * after a real live test call confirmed it: 6,170 users vs. a smaller
+ * competitor, 99.8%+ success rate, cheaper pay-per-event pricing (from
+ * $0.05/1,000 jobs), a real per-job `id` field (misceres' actor had none,
+ * forcing a URL fallback), and a genuine direct `apply.url` rather than a
+ * tracking redirect. See docs/superpowers/specs/2026-09-12-indeed-apify-
+ * discovery-design.md, "Confirmed actor shape" section, for the comparison.
  */
-const INDEED_ACTOR_ID = "misceres/indeed-scraper";
+const INDEED_ACTOR_ID = "kaix/indeed-scraper";
 
 const RESULTS_PER_TITLE_CAP = 20;
 
@@ -21,57 +26,63 @@ const RESULTS_PER_TITLE_CAP = 20;
  * same env var rather than introducing a second one, since both sources
  * share the same underlying limitation.
  */
-const DEFAULT_COUNTRY = process.env.ADZUNA_DEFAULT_COUNTRY || "ca";
+const DEFAULT_COUNTRY = (process.env.ADZUNA_DEFAULT_COUNTRY || "ca").toUpperCase();
 
 type IndeedJobRaw = {
-  positionName?: string;
-  company?: string;
-  location?: string;
-  description?: string;
-  url?: string;
-  postedAt?: string;
+  id?: string;
+  title?: { text?: string };
+  company?: { name?: string };
+  location?: { formatted?: string };
+  description?: { text?: string };
+  apply?: { url?: string };
+  urls?: { apply?: string };
+  dates?: { posted?: string };
 };
 
 /**
- * misceres/indeed-scraper's confirmed input schema (see design spec's
- * "Confirmed actor shape" section): position/location/country strings,
- * maxItemsPerSearch caps results (Apify bills per run/result).
+ * kaix/indeed-scraper's confirmed real input schema (a live test call was
+ * run against it, see design spec): keyword/location/country strings,
+ * maxItems caps results (0 means unlimited — never pass 0, this actor bills
+ * per result).
  */
 export async function searchIndeedJobs(input: { what: string; where: string; distanceKm: number }): Promise<IndeedJobRaw[]> {
   const items = await runApifyActor<IndeedJobRaw>(INDEED_ACTOR_ID, {
-    position: input.what,
+    keyword: input.what,
     location: input.where,
     country: DEFAULT_COUNTRY,
-    maxItemsPerSearch: RESULTS_PER_TITLE_CAP,
+    maxItems: RESULTS_PER_TITLE_CAP,
   });
   return items.slice(0, RESULTS_PER_TITLE_CAP);
 }
 
 /**
- * Maps an Apify Indeed actor result into the shape importVerifiedListingBatch
+ * Maps a kaix/indeed-scraper result into the shape importVerifiedListingBatch
  * expects. Same conservative-defaults pattern as adzunaJobToVerifiedListing:
  * seniorityMatch defaults to "partial" (no per-job LLM comparison against the
  * résumé at this stage), placeholder text for missing employer/location
- * rather than guessing. No documented stable `id` field on this actor's
- * output (see design spec) — `url` doubles as the external id, same as
- * sourcePostingUrl/originalApplyUrl.
+ * rather than guessing. This actor has a real per-job `id` (confirmed via a
+ * live test call), so sourceExternalId no longer needs a URL fallback.
  */
 export function indeedJobToVerifiedListing(job: IndeedJobRaw): VerifiedListing | null {
-  if (!job.positionName || !job.url) return null;
-  if (!job.description || job.description.trim().length < 80) return null;
+  const title = job.title?.text;
+  const applyUrl = job.apply?.url ?? job.urls?.apply;
+  if (!job.id || !title || !applyUrl) return null;
 
-  const postedAt = job.postedAt ? new Date(job.postedAt) : new Date();
+  const description = job.description?.text;
+  if (!description || description.trim().length < 80) return null;
+
+  const postedAt = job.dates?.posted ? new Date(job.dates.posted) : new Date();
 
   return {
     sourceName: INDEED_SOURCE_NAME,
-    sourceExternalId: job.url,
-    sourcePostingUrl: job.url,
-    originalApplyUrl: job.url,
-    title: job.positionName,
-    employer: job.company || "Employer not disclosed",
-    location: job.location || "Location not disclosed",
+    sourceExternalId: job.id,
+    sourcePostingUrl: applyUrl,
+    originalApplyUrl: applyUrl,
+    title,
+    employer: job.company?.name || "Employer not disclosed",
+    location: job.location?.formatted || "Location not disclosed",
     employmentType: "full-time",
-    description: job.description,
+    description,
     postedAt: Number.isNaN(postedAt.getTime()) ? new Date() : postedAt,
     seniorityMatch: "partial",
     verificationNote: "Retrieved automatically via an Apify Indeed actor (see DECISIONS.md D1's 2026-09-12 update).",

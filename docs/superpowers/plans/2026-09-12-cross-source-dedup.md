@@ -661,6 +661,12 @@ Expected: both PASS, no regressions elsewhere (`generalWork.ts`/`scheduler.ts` d
 `runJobSearchForUser` directly with assumptions about its internals beyond the `JobSearchOutcome` return shape,
 which is unchanged).
 
+**Correction found during execution:** `tsconfig.json` has no explicit `target`, which TypeScript defaults to ES3
+— `for (const [k, v] of someMap)` needs ES2015+ or `downlevelIteration`. Three new `for...of` loops over `Map`s
+(two in `crossSourceDedup.ts`'s `groupByEmployer`/`findDuplicateGroups`, one in this task's
+`greenhouseByWatch` loop) hit this. Fixed by using `Array.from(map.entries())` / `Array.from(map.values())`
+instead of touching the shared `tsconfig.json`.
+
 - [ ] **Step 6: Commit**
 
 ```bash

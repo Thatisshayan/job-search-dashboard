@@ -691,6 +691,25 @@ no cross-source dedup yet. See Phase 17.
 
 **Not yet live-tested** against a real Railway deployment with a real Apify token.
 
+## Phase 17 — Cross-source job dedup ✅ built
+
+Closes Phase 16's known gap: the same real job discovered via more than one source (Adzuna, Greenhouse, Indeed)
+in one day's run no longer shows up twice. See
+`docs/superpowers/specs/2026-09-12-indeed-apify-discovery-design.md` for the full design.
+
+- [x] `server/jobSearch/crossSourceDedup.ts` — employer-name normalization/grouping (placeholder-employer values
+  excluded from grouping), batched per-employer-group LLM comparison, "most complete listing wins" merge.
+- [x] `runJobSearchForUser` (`server/telegramBot/jobSearch.ts`) restructured to collect all three sources'
+  candidates before any of them import, so duplicates can be dropped pre-import.
+- [x] **Accepted, documented tradeoff:** "most complete" can drop a Greenhouse-sourced duplicate (the only source
+  with a tested D2 auto-submit path) in favor of a fuller non-Greenhouse description. Not special-cased —
+  revisit if this turns out to matter in practice.
+- [x] Scoped to same-day dedup only — not against jobs imported on previous days (a materially bigger,
+  ongoing-cost feature; explicit non-goal, see the design spec).
+- [x] `pnpm check`/`test` clean (124 tests, up from 113).
+
+**Not yet live-tested** against a real Railway deployment with real cross-source duplicate jobs.
+
 ## Phase 9 — Retire or shrink the web dashboard
 
 - [ ] Decide: keep `client/` as a thin read-only admin/debug view, or remove it once the bot covers the full loop

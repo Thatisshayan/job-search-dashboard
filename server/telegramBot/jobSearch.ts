@@ -5,6 +5,7 @@ import { getDb } from "../db";
 import { importVerifiedListingBatch, type VerifiedListing } from "../verifiedListingImport";
 import { ADZUNA_SOURCE_NAME, adzunaJobToVerifiedListing, isAdzunaConfigured, searchAdzunaJobs } from "../jobSearch/adzuna";
 import { greenhouseBoardJobToVerifiedListing, searchGreenhouseBoardJobs } from "../jobSearch/greenhouseBoard";
+import { INDEED_SOURCE_NAME, indeedJobToVerifiedListing, isApifyConfigured, searchIndeedJobs } from "../jobSearch/indeedApify";
 import { ensureSourceEnabled, listGreenhouseWatches } from "./db";
 
 export type JobSearchOutcome =
@@ -58,6 +59,32 @@ export async function runJobSearchForUser(userId: number): Promise<JobSearchOutc
     }
   }
 
+  if (isApifyConfigured()) {
+    await ensureSourceEnabled(userId, INDEED_SOURCE_NAME);
+    const seen = new Map<string, VerifiedListing>();
+    for (const title of settings.targetTitles) {
+      let results;
+      try {
+        results = await searchIndeedJobs({ what: title, where: settings.city, distanceKm: settings.radiusKm });
+      } catch (error) {
+        console.error(`[jobSearch] Indeed search failed for title "${title}"`, error);
+        continue;
+      }
+      for (const job of results) {
+        const listing = indeedJobToVerifiedListing(job);
+        if (listing) seen.set(`${listing.sourceName}:${listing.sourceExternalId}`, listing);
+      }
+    }
+    const listings = Array.from(seen.values()).slice(0, 20);
+    if (listings.length > 0) {
+      anySourceRan = true;
+      const result = await importVerifiedListingBatch(userId, listings);
+      imported += result.imported;
+      shortlisted = result.shortlisted;
+      duplicatesMerged += result.duplicatesMerged;
+    }
+  }
+
   const watches = await listGreenhouseWatches(userId);
   for (const watch of watches) {
     const boardToken = watch.name.slice("Greenhouse:".length);
@@ -82,7 +109,9 @@ export async function runJobSearchForUser(userId: number): Promise<JobSearchOutc
   }
 
   if (!anySourceRan) {
-    return isAdzunaConfigured() || watches.length > 0 ? { ok: false, reason: "no_results" } : { ok: false, reason: "not_configured" };
+    return isAdzunaConfigured() || isApifyConfigured() || watches.length > 0
+      ? { ok: false, reason: "no_results" }
+      : { ok: false, reason: "not_configured" };
   }
 
   return { ok: true, imported, shortlisted, duplicatesMerged };

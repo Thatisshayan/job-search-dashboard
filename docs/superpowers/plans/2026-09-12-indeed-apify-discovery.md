@@ -17,46 +17,57 @@ tradeoff for shipping this independently.
 
 ---
 
-### Task 1: Confirm the Apify actor and its real input/output shape
+### Task 1: Confirm the Apify actor and its real input/output shape — done during planning review
 
-**Files:** none (research task, output recorded in Task 3)
+**Files:**
+- Modify: `docs/superpowers/specs/2026-09-12-indeed-apify-discovery-design.md`
 
-This project has never called Apify before, so the actor ID and its exact input/output field names must be
-confirmed against real behavior, not assumed.
+Confirmed via the actor's public Apify Store page (`https://apify.com/misceres/indeed-scraper`) before starting
+Task 2: still published and actively maintained (30,516 total users, 2,293 monthly users, 99.8% runs succeeded).
+No live test call was run (no Apify API token available in this environment) — the public store page's documented
+schema is the basis for Tasks 3-4's code. If the real output ever diverges from this once a real token is used in
+Task 7's live-verification, fix `indeedApify.ts`'s field mapping then.
 
-- [ ] **Step 1: Look up an Indeed actor on the Apify Store**
+**Confirmed input schema:** `position` (string, job keywords/title), `location` (string, city/zip/locality),
+`country` (string), `maxItemsPerSearch` (integer, results cap), plus unused-here fields (`startUrls`,
+`parseCompanyDetails`, `saveOnlyUniqueItems`).
 
-Go to https://apify.com/store and search "Indeed". Candidate to start with: `misceres/indeed-scraper` (a
-long-standing, actively maintained community actor for Indeed job listings). Confirm it's still published and
-maintained (check "last updated" and run count/rating on its store page).
+**Confirmed output fields:** `positionName`, `company`, `location`, `description`/`descriptionHTML`, `url`,
+`postedAt`, `salary`, `jobType`, `externalApplyLink`, `rating`/`reviewsCount`. No explicit stable `id` field
+documented — `url` is the most reliable stable identifier, so `indeedJobToVerifiedListing` (Task 4) falls back to
+`url` when no `id`-like field is present, same defensive pattern as Adzuna's mapper already uses.
 
-- [ ] **Step 2: Confirm its input schema**
+This changes two things from the plan's original placeholder code below: the actor input uses `maxItemsPerSearch`
+and a required `country` field (not `maxItems`), and the output's date field is `postedAt` (not
+`postingDateParsed`) — both already corrected in Tasks 3-4's code below.
 
-On the actor's page, open the "Input" tab (or `https://apify.com/misceres/indeed-scraper/input-schema` if
-published). Note the exact field names for: search query/position, location, and country/region — these feed
-`searchIndeedJobs`'s `input.what`/`input.where` in Task 6. Also confirm whether it supports a `maxItems` (or
-equivalent) cap — needed to bound cost per run (design spec's cost-control requirement).
+- [ ] **Step 1: Record this in the design spec**
 
-- [ ] **Step 3: Run one real test call via the Apify console**
+Append to `docs/superpowers/specs/2026-09-12-indeed-apify-discovery-design.md`, under a new final section:
 
-Using the account's existing Apify API token, start one run from the actor's console page with a real query (e.g.
-position "Backend Engineer", location "Toronto, ON"). Let it finish, then open its dataset and copy 2-3 real
-output items.
+```markdown
+## Confirmed actor shape (recorded during implementation, 2026-09-12)
 
-- [ ] **Step 4: Record the confirmed shape**
+Confirmed via https://apify.com/misceres/indeed-scraper's public store page (no live test call — no Apify API
+token available in the implementing environment). Still published/maintained: 30,516 total users, 2,293 monthly
+users, 99.8% runs succeeded.
 
-Save the exact input field names and 2-3 real sample output items (with any obviously personal data redacted) to
-`docs/superpowers/specs/2026-09-12-indeed-apify-discovery-design.md` under a new "Confirmed actor shape (recorded
-during implementation)" section at the end of the file, so Tasks 5-7 below can be adjusted if the real field names
-differ from the placeholders used in this plan's code (`positionName`, `company`, `location`, `description`,
-`url`, `postingDateParsed` — adjust every reference to these names in Tasks 5-7 if the real actor uses different
-ones).
+**Input:** `position`, `location`, `country`, `maxItemsPerSearch`, plus unused `startUrls`/`parseCompanyDetails`/
+`saveOnlyUniqueItems`.
 
-- [ ] **Step 5: Commit**
+**Output:** `positionName`, `company`, `location`, `description`/`descriptionHTML`, `url`, `postedAt`, `salary`,
+`jobType`, `externalApplyLink`, `rating`/`reviewsCount`. No documented stable `id` field — `url` used as the
+external-id fallback.
+
+If Task 7's live Railway verification (real API token) finds the actual live output differs from this, fix
+`server/jobSearch/indeedApify.ts`'s field mapping then and update this note.
+```
+
+- [ ] **Step 2: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-09-12-indeed-apify-discovery-design.md
-git commit -m "Record confirmed Apify Indeed actor input/output shape from a real test run"
+git commit -m "Record confirmed Apify Indeed actor input/output shape from its public store page"
 ```
 
 ---
@@ -335,13 +346,12 @@ import { describe, expect, it } from "vitest";
 import { indeedJobToVerifiedListing, INDEED_SOURCE_NAME } from "./indeedApify";
 
 const baseJob = {
-  id: "abc123",
   positionName: "Backend Software Engineer",
   description: "A".repeat(120),
   company: "Acme Corp",
   location: "Montreal, Quebec",
   url: "https://www.indeed.com/viewjob?jk=abc123",
-  postingDateParsed: "2026-09-01T12:00:00Z",
+  postedAt: "2026-09-01T12:00:00Z",
 };
 
 describe("indeedJobToVerifiedListing", () => {
@@ -349,7 +359,8 @@ describe("indeedJobToVerifiedListing", () => {
     const listing = indeedJobToVerifiedListing(baseJob);
     expect(listing).not.toBeNull();
     expect(listing?.sourceName).toBe(INDEED_SOURCE_NAME);
-    expect(listing?.sourceExternalId).toBe("abc123");
+    // No documented stable `id` field on this actor's output — `url` is the external-id fallback.
+    expect(listing?.sourceExternalId).toBe(baseJob.url);
     expect(listing?.originalApplyUrl).toBe(baseJob.url);
     expect(listing?.employmentType).toBe("full-time");
     expect(listing?.seniorityMatch).toBe("partial");
@@ -370,8 +381,8 @@ describe("indeedJobToVerifiedListing", () => {
     expect(listing?.location).toBe("Location not disclosed");
   });
 
-  it("falls back to the current date when postingDateParsed is missing", () => {
-    const listing = indeedJobToVerifiedListing({ ...baseJob, postingDateParsed: undefined });
+  it("falls back to the current date when postedAt is missing", () => {
+    const listing = indeedJobToVerifiedListing({ ...baseJob, postedAt: undefined });
     expect(listing?.postedAt).toBeInstanceOf(Date);
   });
 });
@@ -403,21 +414,35 @@ const INDEED_ACTOR_ID = "misceres/indeed-scraper";
 
 const RESULTS_PER_TITLE_CAP = 20;
 
+/**
+ * Same single-fixed-country reasoning as Adzuna's ADZUNA_DEFAULT_COUNTRY
+ * (server/jobSearch/adzuna.ts) — no per-user country field yet, only a
+ * free-text city, so one fixed value covers the whole deployment. Reuses the
+ * same env var rather than introducing a second one, since both sources
+ * share the same underlying limitation.
+ */
+const DEFAULT_COUNTRY = process.env.ADZUNA_DEFAULT_COUNTRY || "ca";
+
 type IndeedJobRaw = {
-  id?: string;
   positionName?: string;
   company?: string;
   location?: string;
   description?: string;
   url?: string;
-  postingDateParsed?: string;
+  postedAt?: string;
 };
 
+/**
+ * misceres/indeed-scraper's confirmed input schema (see design spec's
+ * "Confirmed actor shape" section): position/location/country strings,
+ * maxItemsPerSearch caps results (Apify bills per run/result).
+ */
 export async function searchIndeedJobs(input: { what: string; where: string; distanceKm: number }): Promise<IndeedJobRaw[]> {
   const items = await runApifyActor<IndeedJobRaw>(INDEED_ACTOR_ID, {
     position: input.what,
     location: input.where,
-    maxItems: RESULTS_PER_TITLE_CAP,
+    country: DEFAULT_COUNTRY,
+    maxItemsPerSearch: RESULTS_PER_TITLE_CAP,
   });
   return items.slice(0, RESULTS_PER_TITLE_CAP);
 }
@@ -427,17 +452,19 @@ export async function searchIndeedJobs(input: { what: string; where: string; dis
  * expects. Same conservative-defaults pattern as adzunaJobToVerifiedListing:
  * seniorityMatch defaults to "partial" (no per-job LLM comparison against the
  * résumé at this stage), placeholder text for missing employer/location
- * rather than guessing.
+ * rather than guessing. No documented stable `id` field on this actor's
+ * output (see design spec) — `url` doubles as the external id, same as
+ * sourcePostingUrl/originalApplyUrl.
  */
 export function indeedJobToVerifiedListing(job: IndeedJobRaw): VerifiedListing | null {
   if (!job.positionName || !job.url) return null;
   if (!job.description || job.description.trim().length < 80) return null;
 
-  const postedAt = job.postingDateParsed ? new Date(job.postingDateParsed) : new Date();
+  const postedAt = job.postedAt ? new Date(job.postedAt) : new Date();
 
   return {
     sourceName: INDEED_SOURCE_NAME,
-    sourceExternalId: job.id ?? job.url,
+    sourceExternalId: job.url,
     sourcePostingUrl: job.url,
     originalApplyUrl: job.url,
     title: job.positionName,

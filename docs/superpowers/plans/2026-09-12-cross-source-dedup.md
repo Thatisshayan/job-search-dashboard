@@ -480,10 +480,12 @@ describe("runJobSearchForUser cross-source dedup", () => {
       { id: "a1", title: "Backend Engineer", description: "A".repeat(100), company: { display_name: "Acme" }, location: { display_name: "Toronto" }, contract_time: "full_time", created: "2026-09-01T00:00:00Z", redirect_url: "https://adzuna.com/a1" },
     ]);
     searchIndeedJobs.mockResolvedValue([
-      { id: "b1", positionName: "Backend Engineer", description: "A".repeat(300), company: "Acme", location: "Toronto", url: "https://indeed.com/b1", postingDateParsed: "2026-09-01T00:00:00Z" },
+      { positionName: "Backend Engineer", description: "A".repeat(300), company: "Acme", location: "Toronto", url: "https://indeed.com/b1", postedAt: "2026-09-01T00:00:00Z" },
     ]);
     invokeLLM.mockResolvedValueOnce({
-      choices: [{ message: { content: JSON.stringify({ duplicatePairs: [["a1", "b1"]] }) } }],
+      // Indeed's mocked job has no `id` field (matches the real actor's undocumented id, see
+      // indeedApify.ts) so its candidateId falls back to its url, not a short id like Adzuna's "a1".
+      choices: [{ message: { content: JSON.stringify({ duplicatePairs: [["a1", "https://indeed.com/b1"]] }) } }],
     });
 
     await runJobSearchForUser(1);

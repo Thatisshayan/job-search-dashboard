@@ -41,7 +41,8 @@ export function groupByEmployer(listings: VerifiedListing[]): Map<string, Verifi
   }
 
   const crossSourceGroups = new Map<string, VerifiedListing[]>();
-  for (const [key, group] of allGroups) {
+  for (const entry of Array.from(allGroups.entries())) {
+    const [key, group] = entry;
     const sources = new Set(group.map(listing => listing.sourceName));
     if (sources.size > 1) crossSourceGroups.set(key, group);
   }
@@ -144,7 +145,8 @@ function groupPairs(listings: VerifiedListing[], pairs: [string, string][]): Ver
 export async function findDuplicateGroups(employerGroups: Map<string, VerifiedListing[]>): Promise<VerifiedListing[][]> {
   const allGroups: VerifiedListing[][] = [];
 
-  for (const [employerKey, candidates] of employerGroups) {
+  for (const entry of Array.from(employerGroups.entries())) {
+    const [employerKey, candidates] = entry;
     const prompt = candidates
       .map(listing => `- id: "${candidateId(listing)}", title: "${listing.title}", description: "${listing.description.slice(0, 500)}"`)
       .join("\n");

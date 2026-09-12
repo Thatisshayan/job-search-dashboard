@@ -6,6 +6,7 @@ import { importVerifiedListingBatch, type VerifiedListing } from "../verifiedLis
 import { ADZUNA_SOURCE_NAME, adzunaJobToVerifiedListing, isAdzunaConfigured, searchAdzunaJobs } from "../jobSearch/adzuna";
 import { greenhouseBoardJobToVerifiedListing, searchGreenhouseBoardJobs } from "../jobSearch/greenhouseBoard";
 import { INDEED_SOURCE_NAME, indeedJobToVerifiedListing, isApifyConfigured, searchIndeedJobs } from "../jobSearch/indeedApify";
+import { findDuplicateGroups, groupByEmployer, pickMostComplete } from "../jobSearch/crossSourceDedup";
 import { ensureSourceEnabled, listGreenhouseWatches } from "./db";
 
 export type JobSearchOutcome =
@@ -28,13 +29,8 @@ export async function runJobSearchForUser(userId: number): Promise<JobSearchOutc
   const settings = (await db.select().from(searchSettings).where(eq(searchSettings.userId, userId)).limit(1))[0];
   if (!settings) return { ok: false, reason: "no_settings" };
 
-  let imported = 0;
-  let shortlisted = 0;
-  let duplicatesMerged = 0;
-  let anySourceRan = false;
-
+  const adzunaListings: VerifiedListing[] = [];
   if (isAdzunaConfigured()) {
-    await ensureSourceEnabled(userId, ADZUNA_SOURCE_NAME);
     const seen = new Map<string, VerifiedListing>();
     for (const title of settings.targetTitles) {
       let results;
@@ -49,18 +45,11 @@ export async function runJobSearchForUser(userId: number): Promise<JobSearchOutc
         if (listing) seen.set(`${listing.sourceName}:${listing.sourceExternalId}`, listing);
       }
     }
-    const listings = Array.from(seen.values()).slice(0, 20);
-    if (listings.length > 0) {
-      anySourceRan = true;
-      const result = await importVerifiedListingBatch(userId, listings);
-      imported += result.imported;
-      shortlisted = result.shortlisted; // each batch recomputes the user's full shortlist; the last call's count is authoritative
-      duplicatesMerged += result.duplicatesMerged;
-    }
+    adzunaListings.push(...Array.from(seen.values()).slice(0, 20));
   }
 
+  const indeedListings: VerifiedListing[] = [];
   if (isApifyConfigured()) {
-    await ensureSourceEnabled(userId, INDEED_SOURCE_NAME);
     const seen = new Map<string, VerifiedListing>();
     for (const title of settings.targetTitles) {
       let results;
@@ -75,17 +64,11 @@ export async function runJobSearchForUser(userId: number): Promise<JobSearchOutc
         if (listing) seen.set(`${listing.sourceName}:${listing.sourceExternalId}`, listing);
       }
     }
-    const listings = Array.from(seen.values()).slice(0, 20);
-    if (listings.length > 0) {
-      anySourceRan = true;
-      const result = await importVerifiedListingBatch(userId, listings);
-      imported += result.imported;
-      shortlisted = result.shortlisted;
-      duplicatesMerged += result.duplicatesMerged;
-    }
+    indeedListings.push(...Array.from(seen.values()).slice(0, 20));
   }
 
   const watches = await listGreenhouseWatches(userId);
+  const greenhouseListings: VerifiedListing[] = [];
   for (const watch of watches) {
     const boardToken = watch.name.slice("Greenhouse:".length);
     let jobs;
@@ -96,10 +79,61 @@ export async function runJobSearchForUser(userId: number): Promise<JobSearchOutc
       continue;
     }
     const employer = watch.lastStatus?.match(/^Watching (.+)'s Greenhouse board$/)?.[1] ?? boardToken;
-    const listings = jobs
-      .map(job => greenhouseBoardJobToVerifiedListing(job, employer, boardToken))
-      .filter((listing): listing is VerifiedListing => listing !== null)
-      .slice(0, 30);
+    greenhouseListings.push(
+      ...jobs
+        .map(job => greenhouseBoardJobToVerifiedListing(job, employer, boardToken))
+        .filter((listing): listing is VerifiedListing => listing !== null)
+        .slice(0, 30)
+    );
+  }
+
+  // Cross-source dedup: compare all three sources' candidates before any of
+  // them import. A matched group's "most complete" listing is kept in
+  // whichever source-list it originally belonged to; the rest are dropped
+  // from theirs. See docs/superpowers/specs/2026-09-12-indeed-apify-
+  // discovery-design.md for why this runs here, not inside
+  // importVerifiedListingBatch (which requires one sourceName per call).
+  const allCandidates = [...adzunaListings, ...indeedListings, ...greenhouseListings];
+  const duplicateGroups = await findDuplicateGroups(groupByEmployer(allCandidates));
+  const toDrop = new Set<VerifiedListing>();
+  for (const group of duplicateGroups) {
+    const winner = pickMostComplete(group);
+    for (const listing of group) {
+      if (listing !== winner) toDrop.add(listing);
+    }
+  }
+
+  const sourceBatches: Array<{ sourceName: string; listings: VerifiedListing[] }> = [
+    { sourceName: ADZUNA_SOURCE_NAME, listings: adzunaListings.filter(listing => !toDrop.has(listing)) },
+    { sourceName: INDEED_SOURCE_NAME, listings: indeedListings.filter(listing => !toDrop.has(listing)) },
+  ];
+
+  let imported = 0;
+  let shortlisted = 0;
+  let duplicatesMerged = 0;
+  let anySourceRan = false;
+
+  for (const batch of sourceBatches) {
+    if (batch.listings.length === 0) continue;
+    await ensureSourceEnabled(userId, batch.sourceName);
+    anySourceRan = true;
+    const result = await importVerifiedListingBatch(userId, batch.listings);
+    imported += result.imported;
+    shortlisted = result.shortlisted; // each batch recomputes the user's full shortlist; the last call's count is authoritative
+    duplicatesMerged += result.duplicatesMerged;
+  }
+
+  // Greenhouse imports per-watch (each watch's sourceName is unique,
+  // "Greenhouse:<token>"), same as before restructuring — just now using the
+  // post-dedup filtered list.
+  const greenhouseByWatch = new Map<string, VerifiedListing[]>();
+  for (const listing of greenhouseListings) {
+    if (toDrop.has(listing)) continue;
+    const existing = greenhouseByWatch.get(listing.sourceName);
+    if (existing) existing.push(listing);
+    else greenhouseByWatch.set(listing.sourceName, [listing]);
+  }
+  for (const listings of Array.from(greenhouseByWatch.values())) {
     if (listings.length === 0) continue;
     anySourceRan = true;
     const result = await importVerifiedListingBatch(userId, listings);

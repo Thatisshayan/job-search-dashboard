@@ -87,3 +87,48 @@ describe("runJobSearchForUser", () => {
     expect(result.ok === false && result.reason).toBe("no_results");
   });
 });
+
+const invokeLLM = vi.fn();
+vi.mock("../_core/llm", () => ({ invokeLLM: (...args: unknown[]) => invokeLLM(...args) }));
+
+describe("runJobSearchForUser cross-source dedup", () => {
+  beforeEach(() => {
+    getDb.mockResolvedValue(mockDb());
+    listGreenhouseWatches.mockResolvedValue([]);
+    importVerifiedListingBatch.mockResolvedValue({ imported: 1, shortlisted: 1, duplicatesMerged: 0 });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("drops the duplicate copy before importing when Adzuna and Indeed find the same job", async () => {
+    searchAdzunaJobs.mockResolvedValue([
+      {
+        id: "a1",
+        title: "Backend Engineer",
+        description: "A".repeat(100),
+        company: { display_name: "Acme" },
+        location: { display_name: "Toronto" },
+        contract_time: "full_time",
+        created: "2026-09-01T00:00:00Z",
+        redirect_url: "https://adzuna.com/a1",
+      },
+    ]);
+    searchIndeedJobs.mockResolvedValue([
+      { positionName: "Backend Engineer", description: "A".repeat(300), company: "Acme", location: "Toronto", url: "https://indeed.com/b1", postedAt: "2026-09-01T00:00:00Z" },
+    ]);
+    invokeLLM.mockResolvedValueOnce({
+      // Indeed's mocked job has no `id` field (matches the real actor's undocumented id, see
+      // indeedApify.ts) so its candidateId falls back to its url, not a short id like Adzuna's "a1".
+      choices: [{ message: { content: JSON.stringify({ duplicatePairs: [["a1", "https://indeed.com/b1"]] }) } }],
+    });
+
+    await runJobSearchForUser(1);
+
+    const importedSourceNames = importVerifiedListingBatch.mock.calls.map(call => call[1][0]?.sourceName);
+    // Adzuna's list should have been emptied by dedup (Indeed's longer description won pickMostComplete),
+    // so only Indeed's block actually imports anything for this employer.
+    expect(importedSourceNames.filter(Boolean)).toEqual(["Indeed"]);
+  });
+});

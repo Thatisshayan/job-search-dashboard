@@ -60,7 +60,9 @@ doesn't show up twice in a user's shortlist.
 - `isApifyConfigured()` — gates the whole block off when `APIFY_API_TOKEN` is unset, exactly like
   `isAdzunaConfigured()`. Safe to merge before Railway's env var exists.
 - `searchIndeedJobs(input: { what: string; where: string; distanceKm: number }): Promise<IndeedJobRaw[]>` — calls
-  `runApifyActor` with the chosen actor's ID and input schema.
+  `runApifyActor` with the chosen actor's ID and input schema, **capped to 20 results** (matching Adzuna's
+  `.slice(0, 20)` per-title cap in `jobSearch.ts` today) — Apify bills per run/result, so this is a real cost
+  control, not just parity for its own sake.
 - `indeedJobToVerifiedListing(job: IndeedJobRaw): VerifiedListing | null` — maps to the shared shape, following
   the same conservative-defaults pattern as `adzunaJobToVerifiedListing` (`seniorityMatch: "partial"`, reject
   listings with no description or too-short description, etc. — exact field thresholds TBD against the actor's
@@ -75,6 +77,9 @@ doesn't show up twice in a user's shortlist.
 - `groupByEmployer(listings: VerifiedListing[]): Map<string, VerifiedListing[]>` — deterministic pre-filter; only
   employer groups with listings from more than one `sourceName` are candidates for the next step. This bounds the
   LLM-comparison step to realistic volume instead of comparing every listing against every other listing.
+  **Guard:** listings whose `employer` is a placeholder value (`"Employer not disclosed"`, emitted by both Adzuna
+  and Indeed when a company name is missing) are excluded from grouping entirely — normalizing that placeholder
+  would otherwise bucket unrelated jobs from different real employers into one false dedup candidate group.
 - `findDuplicateGroups(candidates: VerifiedListing[]): Promise<VerifiedListing[][]>` — for each employer group with
   cross-source candidates, **one batched LLM call per group** (not one call per pair) sends the candidate
   title/description pairs and asks which are the same posting. Returns groups of listings judged to be the same
@@ -83,6 +88,13 @@ doesn't show up twice in a user's shortlist.
   the fewest placeholder fields (`"Employer not disclosed"`, `"Location not disclosed"`, empty/short description,
   missing `postedAt`) — whole-listing "most complete" rather than field-by-field merging, per the earlier
   decision.
+
+  **Accepted tradeoff, confirmed explicitly (2026-09-12):** this can pick a non-Greenhouse duplicate over a
+  Greenhouse-sourced one purely because it has a fuller description, even though Greenhouse is the only source
+  with a tested auto-submit path (D2). A job dropped this way loses its D2 auto-submit eligibility for that run.
+  Considered and rejected: always preferring the Greenhouse copy regardless of completeness — kept "most
+  complete" as the simpler, uniform rule instead. If auto-submit-eligible jobs going missing this way turns out
+  to matter in practice, revisit by special-casing Greenhouse in `pickMostComplete`.
 
 ### Integration into `runJobSearchForUser`
 
@@ -135,9 +147,21 @@ Deferred to implementation start: research well-maintained Indeed actors on the 
 run, reliability/maintenance activity, and output shape's fit with the field-mapping above, and propose one before
 wiring in `indeedApify.ts`.
 
+## Inherited scaling limitation (not fixed here)
+
+`scheduler.ts`'s `tick()` loops over users with a sequential `for...await` — already documented in its own
+comment as "fine for current single-user scope, revisit if this ever needs to survive across multiple server
+instances." Adding a per-title, 5-minute-capped Apify wait per user compounds that existing limitation: as more
+users onboard, one user's slow Indeed run can delay every user queued behind them in the same tick. Not addressed
+by this spec — consistent with D3 (single-user rollout, multi-user is a scoping decision revisited later) — but
+worth being aware of before this genuinely scales past one or two users, since the wait-fully choice (rather than
+timing out and skipping) makes the compounding worse than Adzuna's fast REST calls ever were.
+
 ## Open questions carried into implementation
 
 - Exact placeholder/length thresholds for `indeedJobToVerifiedListing` (mirrors Adzuna's `description.length < 80`
   check, but Indeed's actual field names/shapes depend on the actor chosen).
 - Whether the 5-minute Apify poll cap needs to be configurable per-environment (e.g. shorter in CI/tests) — likely
   yes, follow the existing env-var-driven pattern (`ADZUNA_DEFAULT_COUNTRY` etc.).
+- Cap the number of candidate pairs (or truncate description length) sent in one `findDuplicateGroups` LLM call
+  for an unusually large employer group, so one busy employer can't balloon a single call's token cost.

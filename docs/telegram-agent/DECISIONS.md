@@ -28,6 +28,28 @@ pastes). Not chosen as the primary mechanism because it doesn't satisfy
 day-one fallback if the chosen API's coverage turns out to be too thin for
 a given user's role/location.
 
+**Update (2026-09-12): Apify actors approved as a third discovery source,
+scoped to Indeed only.** This directly reopens the "Explicitly declined"
+note further down this file (originally about Camoufox's anti-detection
+capability, same underlying category of risk) — recorded here explicitly
+rather than silently, per this file's own stated purpose.
+
+Asked to add Apify for both LinkedIn and Indeed; scaled back to **Indeed
+only**. LinkedIn was excluded deliberately: it's the specific site named in
+*hiQ Labs v. LinkedIn* (the precedent D1 itself cites) and has the most
+aggressive enforcement of the boards considered, so it carries
+disproportionate legal exposure relative to the coverage it would add.
+Indeed still carries real ToS/anti-scraping risk — this is a conscious
+acceptance of that risk, not a claim it's risk-free — but is a narrower bet
+than LinkedIn specifically.
+
+**Before building:** confirm the same reasoning still holds under D3 —
+this was reasoned about as a single-user, personal-automation risk profile.
+If multi-user rollout (D3) happens before this is revisited, the risk
+category changes (see D3's own reasoning about scraping + multiple users
+becoming "operating a scraping service for third parties") and this
+decision should be re-examined, not assumed to still apply.
+
 ## D2 — Auto-apply scope: human final click retained
 
 **Chosen:** The bot does everything up to and including generating tailored
@@ -54,6 +76,34 @@ Lever, Workable). A real middle ground worth reconsidering later — these
 platforms have more structured, more script-friendly apply flows than
 arbitrary employer sites — but out of scope for now given the guardrail
 above.
+
+**Update (2026-09-12): full autonomous submission approved for select
+cases, gated on two conditions that must both hold.**
+
+1. **Match score ≥ 90/100** on the existing scorecard (`scoreJob`'s
+   `totalScore`, the same field `settings.minimumScore` already filters
+   the shortlist on) — a materially higher bar than shortlist inclusion,
+   intended to only auto-submit near-perfect matches.
+2. **Explicit per-user opt-in**, off by default. A user must turn this on
+   (e.g. via a new `/edit` subcommand or onboarding step) before any job of
+   theirs can skip the approval card — no user is auto-enrolled.
+
+Approved scope is **all discovery sources**, not just Greenhouse — but this
+is a scope approval, not a claim the capability exists yet. Today only
+Greenhouse has a tested structured-fill flow
+(`server/autoApply/greenhouse.ts`); non-Greenhouse jobs have no submission
+mechanism at all yet, autonomous or otherwise. In practice, until fill flows
+exist for other ATS platforms (or arbitrary employer sites), this decision
+is Greenhouse-only *by capability*, not by the decision's own scope. Building
+new fill flows for additional platforms is separate implementation work,
+each one inheriting the same fragility concerns (different forms, uploads,
+logins, CAPTCHAs) that made D2's original guardrail necessary — extending
+autonomous submission to a new platform should get its own live-verification
+pass before trusting it unsupervised, same as Greenhouse got in Phase 10.
+
+This does not weaken the guardrail for every other case: anything below the
+score threshold, or any user who hasn't opted in, still goes through the
+unchanged human-approval flow this section originally established.
 
 ## D3 — Multi-tenancy: single-user first, schema stays ready
 

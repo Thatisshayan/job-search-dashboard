@@ -693,10 +693,14 @@ approved, scoped to Indeed only — not LinkedIn) and
 **Known gap, addressed in the next phase:** the same real job can appear via both Indeed and Adzuna/Greenhouse —
 no cross-source dedup yet. See Phase 17.
 
-**Live-verified 2026-09-12** end-to-end through the real code (`apifyClient.ts`/`indeedApify.ts`) against a real
-Apify token: a real search for "Backend Engineer" in "Toronto, ON" returned 20 real listings, all correctly mapped
-to `VerifiedListing`. Not yet verified against the actual Railway deployment specifically (token is set there, but
-a real bot-triggered search hasn't been run against production yet).
+**Live-verified 2026-09-12 against the real Railway production deployment.** Via a temporary, secret-gated admin
+endpoint (added, used once, then fully removed before ever being committed — no trace in git history, and its
+Railway env var was deleted too), triggered a real daily search for a real onboarded user (userId 2, Toronto,
+"General Labor" track):
+`{"ok":true,"imported":30,"shortlisted":11,"duplicatesMerged":6}`, `recentJobsBySource: {"Adzuna":30,"Indeed":20}`
+— 20 real Indeed listings landed in production, one reaching the shortlist (Canelite/"General Labor", score 60).
+Confirmed cleanup: both the endpoint's path and its Railway env var are gone; the path now returns the app's
+normal SPA fallback like any other nonexistent URL, not the removed handler.
 
 ## Phase 17 — Cross-source job dedup ✅ built
 
@@ -715,7 +719,13 @@ in one day's run no longer shows up twice. See
   ongoing-cost feature; explicit non-goal, see the design spec).
 - [x] `pnpm check`/`test` clean (124 tests, up from 113).
 
-**Not yet live-tested** against a real Railway deployment with real cross-source duplicate jobs.
+**Partially live-verified 2026-09-12** — ran without error against the real production deployment (same admin-
+endpoint trigger as Phase 16's live-verify, userId 2), but this run's Adzuna and Indeed results happened to share
+zero overlapping employers, so `groupByEmployer` found nothing to compare and the LLM dedup call never fired.
+This confirms the code path doesn't break in production, but does **not** yet confirm it actually catches a real
+cross-source duplicate live — that remains proven only by `crossSourceDedup.test.ts`/`jobSearch.test.ts`'s unit
+and integration tests. Revisit once a real run happens to surface an actual overlapping-employer case, or
+deliberately construct one (e.g. `/watch` a Greenhouse company whose jobs also appear on Adzuna/Indeed).
 
 ## Phase 9 — Retire or shrink the web dashboard
 

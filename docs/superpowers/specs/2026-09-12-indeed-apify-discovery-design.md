@@ -165,3 +165,19 @@ timing out and skipping) makes the compounding worse than Adzuna's fast REST cal
   yes, follow the existing env-var-driven pattern (`ADZUNA_DEFAULT_COUNTRY` etc.).
 - Cap the number of candidate pairs (or truncate description length) sent in one `findDuplicateGroups` LLM call
   for an unusually large employer group, so one busy employer can't balloon a single call's token cost.
+
+## Confirmed actor shape (recorded during implementation, 2026-09-12)
+
+Confirmed via https://apify.com/misceres/indeed-scraper's public store page (no live test call — no Apify API
+token available in the implementing environment). Still published/maintained: 30,516 total users, 2,293 monthly
+users, 99.8% runs succeeded.
+
+**Input:** `position`, `location`, `country`, `maxItemsPerSearch`, plus unused `startUrls`/`parseCompanyDetails`/
+`saveOnlyUniqueItems`.
+
+**Output:** `positionName`, `company`, `location`, `description`/`descriptionHTML`, `url`, `postedAt`, `salary`,
+`jobType`, `externalApplyLink`, `rating`/`reviewsCount`. No documented stable `id` field — `url` used as the
+external-id fallback.
+
+If Task 7's live Railway verification (real API token) finds the actual live output differs from this, fix
+`server/jobSearch/indeedApify.ts`'s field mapping then and update this note.

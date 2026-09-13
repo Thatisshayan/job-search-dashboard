@@ -143,6 +143,47 @@ added a `DEFAULT_OPENROUTER_MODEL` constant (`openai/gpt-4o-mini`) as a
 placeholder so `invokeLLM` always sends a valid `model` field (OpenRouter
 requires one); this should be revisited per use case in Phase 2/6.
 
+**Update (2026-09-13): reversed — OpenRouter dropped, calling Nvidia's own
+API directly.** By 2026-09-01, `DEFAULT_OPENROUTER_MODEL` was already pinned
+to `nvidia/nemotron-3-super-120b-a12b:free` because this OpenRouter account's
+privacy setting restricted every request to the `nvidia` provider anyway —
+OpenRouter had become a pass-through to Nvidia specifically, not genuine
+multi-provider flexibility. Explicitly requested: connect to Nvidia's own
+API (`https://integrate.api.nvidia.com/v1`) directly instead of through
+OpenRouter's aggregation layer.
+
+**Verified live before committing to this** (same real per-request-key
+requirement as D1's Apify choice and Phase 16's actor pick): the real risk
+was whether Nvidia's direct API honors this codebase's `response_format:
+json_schema` strict-JSON requirement (every LLM call site —
+`resumeParsing.ts`, `documentTailoring.ts`, `crossSourceDedup.ts` —
+requires it). A first live test with `max_tokens: 100` appeared to fail
+(the model returned free-text reasoning, not JSON) — but this app never
+sets a `max_tokens` cap anywhere in its real call sites, and a follow-up
+test with more room confirmed the model is a reasoning model that emits a
+"thinking" preamble before its schema-conforming answer:
+`finish_reason: "stop"`, `content: "{\"name\": \"John\", \"age\": 30}"` —
+clean, valid JSON, no wrapping prose. The initial "failure" was an artifact
+of an arbitrarily-low token cap in the test script, not a real platform
+limitation, since production code never imposes that cap.
+
+The swap is small and self-contained: `server/_core/llm.ts` and
+`server/_core/env.ts` were the only two files coupled to OpenRouter-specific
+config (base URL, API key, the `DEFAULT_OPENROUTER_MODEL` constant) — no
+other file in the codebase references either. `resolveApiUrl`/
+`assertApiKey`/`listLLMModels` now point at `ENV.nvidiaBaseUrl`/
+`ENV.nvidiaApiKey`; the model constant is renamed `DEFAULT_NVIDIA_MODEL =
+"nvidia/nemotron-3-super-120b-a12b"` (Nvidia's own catalog slug — no
+`:free` suffix, that was OpenRouter's own tagging convention, not part of
+the real model name). OpenRouter's optional `X-Title` attribution header
+was dropped (meaningless outside OpenRouter).
+
+**Caveat carried forward:** the reasoning preamble means real calls burn
+more tokens (and take longer) before reaching their structured answer than
+a non-reasoning model would — acceptable for now since no call site sets a
+token cap, but worth knowing if latency/cost ever becomes a concern serving
+several users.
+
 ## Open questions raised 2026-08-31, not yet decided
 
 These came up directly after Phase 7/8 live verification. Recorded here

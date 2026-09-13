@@ -213,32 +213,31 @@ const normalizeToolChoice = (
 };
 
 const resolveApiUrl = () =>
-  `${ENV.openRouterBaseUrl.replace(/\/$/, "")}/chat/completions`;
+  `${ENV.nvidiaBaseUrl.replace(/\/$/, "")}/chat/completions`;
 
 const assertApiKey = () => {
-  if (!ENV.openRouterApiKey) {
-    throw new Error("OPENROUTER_API_KEY is not configured");
+  if (!ENV.nvidiaApiKey) {
+    throw new Error("NVIDIA_API_KEY is not configured");
   }
 };
 
-// OpenRouter rejects a request with no `model`, unlike some proxies that pick
-// a default server-side. Callers can pass this explicitly, or omit `model`
-// and rely on this fallback via `params.model ?? DEFAULT_OPENROUTER_MODEL`.
+// Nvidia rejects a request with no `model`. Callers can pass this
+// explicitly, or omit `model` and rely on this fallback via
+// `params.model ?? DEFAULT_NVIDIA_MODEL`.
 //
-// Changed 2026-09-01: this account's OpenRouter privacy setting restricts
-// requests to the "nvidia" inference provider only (openrouter.ai/settings/
-// privacy) — gpt-4o-mini is served by azure/openai, so every call was
-// failing 404 in production. Verified via OpenRouter's public /models and
-// /models/{id}/endpoints APIs that of NVIDIA's own nemotron models, only
-// nemotron-3-super-120b-a12b:free is actually served by a provider literally
-// named "Nvidia" (the paid nvidia/nemotron-* slugs route through third-party
-// hosts like DeepInfra/CoreWeave instead, which the privacy setting also
-// blocks) and supports structured_outputs/response_format, which every LLM
-// call in this codebase (resumeParsing.ts, documentTailoring.ts) requires.
-// Caveat: this is a free-tier model with OpenRouter's usual rate limits —
-// if that becomes a real problem under load, the other fix is loosening the
-// account's allowed-providers setting instead of picking a different model.
-export const DEFAULT_OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
+// Changed 2026-09-13 (DECISIONS.md D4's update): dropped OpenRouter,
+// calling Nvidia's own API (https://integrate.api.nvidia.com/v1) directly
+// instead — OpenRouter had become a pure pass-through to Nvidia anyway,
+// since this account's privacy setting already restricted every request to
+// the "nvidia" provider. Verified live before switching: this model does
+// honor response_format/json_schema (every LLM call in this codebase —
+// resumeParsing.ts, documentTailoring.ts, crossSourceDedup.ts — requires
+// strict structured output), but it's a reasoning model that emits a
+// "thinking" preamble before its schema-conforming answer — a low
+// max_tokens cap can cut it off mid-thought before it ever reaches the
+// JSON. No call site in this codebase sets max_tokens, so this doesn't
+// bite in practice, but don't add a low cap here without re-testing.
+export const DEFAULT_NVIDIA_MODEL = "nvidia/nemotron-3-super-120b-a12b";
 
 const normalizeResponseFormat = ({
   responseFormat,
@@ -377,7 +376,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
 
   const payload: Record<string, unknown> = {
     messages: messages.map(normalizeMessage),
-    model: model ?? DEFAULT_OPENROUTER_MODEL,
+    model: model ?? DEFAULT_NVIDIA_MODEL,
   };
 
   if (tools && tools.length > 0) {
@@ -419,10 +418,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${ENV.openRouterApiKey}`,
-      // Optional OpenRouter attribution headers (shown on their public rankings
-      // page); harmless to omit but cheap to set correctly.
-      "X-Title": "Job Search Dashboard",
+      authorization: `Bearer ${ENV.nvidiaApiKey}`,
     },
     body: JSON.stringify(payload),
   });
@@ -452,10 +448,10 @@ export type ModelsResponse = {
 export async function listLLMModels(): Promise<ModelsResponse> {
   assertApiKey();
 
-  const url = `${ENV.openRouterBaseUrl.replace(/\/$/, "")}/models`;
+  const url = `${ENV.nvidiaBaseUrl.replace(/\/$/, "")}/models`;
 
   const response = await fetchWithBackoff(url, {
-    headers: { authorization: `Bearer ${ENV.openRouterApiKey}` },
+    headers: { authorization: `Bearer ${ENV.nvidiaApiKey}` },
   });
 
   if (!response.ok) {

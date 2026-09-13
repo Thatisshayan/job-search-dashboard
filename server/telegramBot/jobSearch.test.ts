@@ -42,6 +42,8 @@ function mockDb() {
         }),
       }),
     }),
+    insert: () => ({ values: () => [{ insertId: 1 }] }),
+    update: () => ({ set: () => ({ where: async () => undefined }) }),
   };
 }
 
@@ -86,6 +88,42 @@ describe("runJobSearchForUser", () => {
     const result = await runJobSearchForUser(1);
     expect(result.ok).toBe(false);
     expect(result.ok === false && result.reason).toBe("no_results");
+  });
+});
+
+describe("runJobSearchForUser claims its jobRuns row early", () => {
+  beforeEach(() => {
+    listGreenhouseWatches.mockResolvedValue([]);
+    importVerifiedListingBatch.mockResolvedValue({ imported: 1, shortlisted: 1, duplicatesMerged: 0 });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("inserts a claim jobRuns row before calling any discovery source", async () => {
+    const callOrder: string[] = [];
+    const insertMock = vi.fn(() => ({
+      values: vi.fn(() => {
+        callOrder.push("jobRuns.insert");
+        return [{ insertId: 42 }];
+      }),
+    }));
+    getDb.mockResolvedValue({ ...mockDb(), insert: insertMock, update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn() })) })) });
+
+    searchAdzunaJobs.mockImplementation(async () => {
+      callOrder.push("adzuna.search");
+      return [];
+    });
+    searchIndeedJobs.mockImplementation(async () => {
+      callOrder.push("indeed.search");
+      return [];
+    });
+
+    await runJobSearchForUser(1);
+
+    expect(callOrder[0]).toBe("jobRuns.insert");
+    expect(callOrder).toContain("adzuna.search");
   });
 });
 

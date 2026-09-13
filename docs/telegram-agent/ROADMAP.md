@@ -780,7 +780,11 @@ explicitly requested connecting to Nvidia's own API (`https://integrate.api.nvid
 reaching their structured answer than a non-reasoning model would — acceptable for now, worth knowing if
 latency/cost becomes a concern serving several users.
 
-**Not yet live-tested** against the real Railway deployment (needs `NVIDIA_API_KEY` set there and a redeploy).
+**Live-verified 2026-09-13 against the real Railway production deployment.** Via a temporary, secret-gated admin
+endpoint (added, used once, then fully removed before ever being committed — no trace in git history; its Railway
+env var was deleted too), triggered a real `invokeLLM` call in production: `{"model":
+"nvidia/nemotron-3-super-120b-a12b", "content": "{\"name\": \"Priya\", \"age\": 27}"}` — real structured JSON,
+served by Nvidia's own API, no OpenRouter involved.
 
 ## Phase 9 — Retire or shrink the web dashboard
 

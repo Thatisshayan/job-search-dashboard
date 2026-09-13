@@ -28,38 +28,53 @@ async function alreadyRanToday(db: NonNullable<Awaited<ReturnType<typeof getDb>>
   return getLocalDateKey(timezone, latest.startedAt) === getLocalDateKey(timezone);
 }
 
+let tickInProgress = false;
+
 /**
  * Checked once a minute: for every user whose local clock currently reads
  * their configured scheduledTime and who hasn't already had a job run today
  * (in their own timezone), trigger a search and notify their paired Telegram
  * chat. Single in-process interval — fine for the current single-user scope;
  * revisit if this ever needs to survive across multiple server instances.
+ *
+ * Guarded against overlapping calls: Indeed's Apify actor alone can poll up
+ * to 5 minutes per title (apifyClient.ts), so with more than a couple of
+ * users a tick can easily run past the 60s interval below. Without this
+ * guard, a second tick starting mid-loop would race the first on the same
+ * users — see docs/superpowers/specs/2026-09-12-multi-tenant-stability-
+ * design.md, Fix 1.
  */
-async function tick(): Promise<void> {
-  const db = await getDb();
-  if (!db) return;
+export async function tick(): Promise<void> {
+  if (tickInProgress) return;
+  tickInProgress = true;
+  try {
+    const db = await getDb();
+    if (!db) return;
 
-  const settingsRows = await db.select().from(searchSettings);
-  for (const settings of settingsRows) {
-    if (!settings.dailyNotificationEnabled) continue;
-    if (currentHHMM(settings.timezone) !== settings.scheduledTime) continue;
+    const settingsRows = await db.select().from(searchSettings);
+    for (const settings of settingsRows) {
+      if (!settings.dailyNotificationEnabled) continue;
+      if (currentHHMM(settings.timezone) !== settings.scheduledTime) continue;
 
-    try {
-      if (await alreadyRanToday(db, settings.userId, settings.timezone)) continue;
+      try {
+        if (await alreadyRanToday(db, settings.userId, settings.timezone)) continue;
 
-      const connection = (
-        await db.select().from(telegramConnections).where(eq(telegramConnections.userId, settings.userId)).limit(1)
-      )[0];
-      if (!connection) continue;
+        const connection = (
+          await db.select().from(telegramConnections).where(eq(telegramConnections.userId, settings.userId)).limit(1)
+        )[0];
+        if (!connection) continue;
 
-      if (settings.track === "general") {
-        await runGeneralWorkAndNotify(connection.chatId, settings.userId);
-      } else {
-        await runSearchAndNotify(connection.chatId, settings.userId);
+        if (settings.track === "general") {
+          await runGeneralWorkAndNotify(connection.chatId, settings.userId);
+        } else {
+          await runSearchAndNotify(connection.chatId, settings.userId);
+        }
+      } catch (error) {
+        console.error(`[scheduler] Daily search failed for user ${settings.userId}`, error);
       }
-    } catch (error) {
-      console.error(`[scheduler] Daily search failed for user ${settings.userId}`, error);
     }
+  } finally {
+    tickInProgress = false;
   }
 }
 

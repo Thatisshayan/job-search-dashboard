@@ -29,7 +29,7 @@ vi.mock("../verifiedListingImport", () => ({
   importVerifiedListingBatch: (...args: unknown[]) => importVerifiedListingBatch(...args),
 }));
 
-import { runJobSearchForUser } from "./jobSearch";
+import { runGeneralWorkSearchForUser, runJobSearchForUser } from "./jobSearch";
 
 const settingsRow = { userId: 1, targetTitles: ["Backend Engineer"], city: "Toronto", radiusKm: 25 };
 
@@ -121,6 +121,41 @@ describe("runJobSearchForUser claims its jobRuns row early", () => {
     });
 
     await runJobSearchForUser(1);
+
+    expect(callOrder[0]).toBe("jobRuns.insert");
+    expect(callOrder).toContain("adzuna.search");
+  });
+});
+
+describe("runGeneralWorkSearchForUser claims its jobRuns row early", () => {
+  beforeEach(() => {
+    listGreenhouseWatches.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("inserts a claim jobRuns row before calling Adzuna", async () => {
+    const callOrder: string[] = [];
+    const dbStub = {
+      select: () => ({ from: () => ({ where: () => ({ limit: async () => [settingsRow] }) }) }),
+      insert: vi.fn(() => ({
+        values: vi.fn(() => {
+          callOrder.push("jobRuns.insert");
+          return [{ insertId: 99 }];
+        }),
+      })),
+      update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn() })) })),
+    };
+    getDb.mockResolvedValue(dbStub);
+
+    searchAdzunaJobs.mockImplementation(async () => {
+      callOrder.push("adzuna.search");
+      return [];
+    });
+
+    await runGeneralWorkSearchForUser(1);
 
     expect(callOrder[0]).toBe("jobRuns.insert");
     expect(callOrder).toContain("adzuna.search");

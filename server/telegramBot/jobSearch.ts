@@ -230,79 +230,98 @@ export async function runGeneralWorkSearchForUser(userId: number): Promise<Gener
 
   await ensureSourceEnabled(userId, GENERAL_WORK_SOURCE_NAME);
 
-  const seen = new Map<string, VerifiedListing>();
-  for (const title of GENERAL_WORK_TITLES) {
-    let results;
-    try {
-      results = await searchAdzunaJobs({ what: title, where: settings.city, distanceKm: settings.radiusKm, resultsPerPage: 5 });
-    } catch (error) {
-      console.error(`[generalWorkSearch] Adzuna search failed for title "${title}"`, error);
-      continue;
+  // Claimed before the search loop, not after -- same reasoning as the
+  // career-track fix in runJobSearchForUser. See docs/superpowers/specs/
+  // 2026-09-12-multi-tenant-stability-design.md, Fix 1.
+  const claimInsert = await db.insert(jobRuns).values({ userId, status: "running" });
+  const claimRunId = resultHeader(claimInsert).insertId;
+
+  try {
+    const seen = new Map<string, VerifiedListing>();
+    for (const title of GENERAL_WORK_TITLES) {
+      let results;
+      try {
+        results = await searchAdzunaJobs({ what: title, where: settings.city, distanceKm: settings.radiusKm, resultsPerPage: 5 });
+      } catch (error) {
+        console.error(`[generalWorkSearch] Adzuna search failed for title "${title}"`, error);
+        continue;
+      }
+      for (const job of results) {
+        const listing = adzunaJobToVerifiedListing(job);
+        if (listing) seen.set(`${listing.sourceExternalId ?? listing.sourcePostingUrl}`, listing);
+      }
     }
-    for (const job of results) {
-      const listing = adzunaJobToVerifiedListing(job);
-      if (listing) seen.set(`${listing.sourceExternalId ?? listing.sourcePostingUrl}`, listing);
+    const listings = Array.from(seen.values()).slice(0, GENERAL_WORK_RESULTS_CAP);
+    if (listings.length === 0) {
+      if (claimRunId) await db.update(jobRuns).set({ status: "completed", completedAt: new Date() }).where(eq(jobRuns.id, claimRunId));
+      return { ok: false, reason: "no_results" };
     }
+
+    const jobIds: number[] = [];
+    for (const listing of listings) {
+      const fingerprint = generalWorkFingerprint(listing);
+      await db
+        .insert(jobs)
+        .values({
+          sourceName: GENERAL_WORK_SOURCE_NAME,
+          sourcePostingUrl: listing.sourcePostingUrl,
+          originalApplyUrl: listing.originalApplyUrl,
+          sourceExternalId: listing.sourceExternalId,
+          fingerprint,
+          title: listing.title,
+          employer: listing.employer,
+          location: listing.location,
+          locationKm: listing.locationKm,
+          employmentType: listing.employmentType,
+          description: listing.description,
+          postedAt: listing.postedAt,
+          expiresAt: listing.expiresAt,
+          status: "active",
+          analysis: { verificationNote: listing.verificationNote, track: "general-work" },
+          lastSeenAt: new Date(),
+        })
+        .onDuplicateKeyUpdate({
+          set: { status: "active", lastSeenAt: new Date(), originalApplyUrl: listing.originalApplyUrl },
+        });
+      const row = (await db.select({ id: jobs.id }).from(jobs).where(eq(jobs.fingerprint, fingerprint)).limit(1))[0];
+      if (row) jobIds.push(row.id);
+    }
+    if (jobIds.length === 0) {
+      if (claimRunId) await db.update(jobRuns).set({ status: "completed", completedAt: new Date() }).where(eq(jobRuns.id, claimRunId));
+      return { ok: false, reason: "no_results" };
+    }
+
+    const existingApplications = await db
+      .select({ jobId: applications.jobId, telegramMessageId: applications.telegramMessageId })
+      .from(applications)
+      .where(and(eq(applications.userId, userId), inArray(applications.jobId, jobIds)));
+    // Only a row whose Telegram card actually got delivered counts as "already
+    // handled" — see the matching comment in telegramBot/notify.ts.
+    const alreadyDecided = new Set(existingApplications.filter(row => row.telegramMessageId).map(row => row.jobId));
+
+    const rows = await db.select().from(jobs).where(inArray(jobs.id, jobIds));
+    const newJobs: GeneralWorkJob[] = rows
+      .filter(row => !alreadyDecided.has(row.id))
+      .map(row => ({ jobId: row.id, title: row.title, employer: row.employer, location: row.location, originalApplyUrl: row.originalApplyUrl }));
+
+    // This track never touches importVerifiedListingBatch (see the function
+    // comment above), which is normally what writes `job_runs` -- update the
+    // claim row to "completed" instead of inserting a fresh one.
+    if (claimRunId) {
+      await db
+        .update(jobRuns)
+        .set({ status: "completed", listingsCollected: listings.length, jobsScored: jobIds.length, shortlistCount: newJobs.length, completedAt: new Date() })
+        .where(eq(jobRuns.id, claimRunId));
+    }
+
+    return { ok: true, found: listings.length, newJobs };
+  } catch (error) {
+    if (claimRunId) {
+      await db
+        .update(jobRuns)
+        .set({ status: "failed", errorSummary: error instanceof Error ? error.message : String(error), completedAt: new Date() })
+        .where(eq(jobRuns.id, claimRunId));
+    }
+    throw error;
   }
-  const listings = Array.from(seen.values()).slice(0, GENERAL_WORK_RESULTS_CAP);
-  if (listings.length === 0) return { ok: false, reason: "no_results" };
-
-  const jobIds: number[] = [];
-  for (const listing of listings) {
-    const fingerprint = generalWorkFingerprint(listing);
-    await db
-      .insert(jobs)
-      .values({
-        sourceName: GENERAL_WORK_SOURCE_NAME,
-        sourcePostingUrl: listing.sourcePostingUrl,
-        originalApplyUrl: listing.originalApplyUrl,
-        sourceExternalId: listing.sourceExternalId,
-        fingerprint,
-        title: listing.title,
-        employer: listing.employer,
-        location: listing.location,
-        locationKm: listing.locationKm,
-        employmentType: listing.employmentType,
-        description: listing.description,
-        postedAt: listing.postedAt,
-        expiresAt: listing.expiresAt,
-        status: "active",
-        analysis: { verificationNote: listing.verificationNote, track: "general-work" },
-        lastSeenAt: new Date(),
-      })
-      .onDuplicateKeyUpdate({
-        set: { status: "active", lastSeenAt: new Date(), originalApplyUrl: listing.originalApplyUrl },
-      });
-    const row = (await db.select({ id: jobs.id }).from(jobs).where(eq(jobs.fingerprint, fingerprint)).limit(1))[0];
-    if (row) jobIds.push(row.id);
-  }
-  if (jobIds.length === 0) return { ok: false, reason: "no_results" };
-
-  const existingApplications = await db
-    .select({ jobId: applications.jobId, telegramMessageId: applications.telegramMessageId })
-    .from(applications)
-    .where(and(eq(applications.userId, userId), inArray(applications.jobId, jobIds)));
-  // Only a row whose Telegram card actually got delivered counts as "already
-  // handled" — see the matching comment in telegramBot/notify.ts.
-  const alreadyDecided = new Set(existingApplications.filter(row => row.telegramMessageId).map(row => row.jobId));
-
-  const rows = await db.select().from(jobs).where(inArray(jobs.id, jobIds));
-  const newJobs: GeneralWorkJob[] = rows
-    .filter(row => !alreadyDecided.has(row.id))
-    .map(row => ({ jobId: row.id, title: row.title, employer: row.employer, location: row.location, originalApplyUrl: row.originalApplyUrl }));
-
-  // This track never touches importVerifiedListingBatch (see the function
-  // comment above), which is normally what writes `job_runs` — write a
-  // minimal completed record here instead, purely so scheduler.ts's
-  // "already ran today" dedup also works for general-track daily runs.
-  await db.insert(jobRuns).values({
-    userId,
-    status: "completed",
-    listingsCollected: listings.length,
-    jobsScored: jobIds.length,
-    shortlistCount: newJobs.length,
-    completedAt: new Date(),
-  });
-
-  return { ok: true, found: listings.length, newJobs };
 }

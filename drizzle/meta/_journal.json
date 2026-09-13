@@ -50,6 +50,13 @@
       "when": 1788302023842,
       "tag": "0006_vengeful_firebrand",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1789259908852,
+      "tag": "0007_loving_obadiah_stane",
+      "breakpoints": true
     }
   ]
 }

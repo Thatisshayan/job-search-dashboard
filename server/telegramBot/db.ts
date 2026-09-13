@@ -160,17 +160,20 @@ export async function setGeneralWorkEnabled(userId: number, enabled: boolean): P
  * "register a source" form is behind the website's OAuth login, which bot
  * users never have).
  */
+/**
+ * A native MySQL upsert against sourceConfigs' (userId, name) unique
+ * constraint — atomic at the database level, so two concurrent calls for the
+ * same user+source (e.g. two overlapping scheduler ticks) can never create
+ * duplicate rows the way a read-then-insert could. See docs/superpowers/
+ * specs/2026-09-12-multi-tenant-stability-design.md, Fix 2.
+ */
 export async function ensureSourceEnabled(userId: number, sourceName: string) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  const existing = (
-    await db.select().from(sourceConfigs).where(and(eq(sourceConfigs.userId, userId), eq(sourceConfigs.name, sourceName))).limit(1)
-  )[0];
-  if (existing) {
-    if (!existing.enabled) await db.update(sourceConfigs).set({ enabled: true }).where(eq(sourceConfigs.id, existing.id));
-    return;
-  }
-  await db.insert(sourceConfigs).values({ userId, name: sourceName, kind: "licensed", enabled: true, lastStatus: "Auto-registered for bot-driven search" });
+  await db
+    .insert(sourceConfigs)
+    .values({ userId, name: sourceName, kind: "licensed", enabled: true, lastStatus: "Auto-registered for bot-driven search" })
+    .onDuplicateKeyUpdate({ set: { enabled: true } });
 }
 
 /**
@@ -183,9 +186,6 @@ export async function ensureSourceEnabled(userId: number, sourceName: string) {
 export async function registerGreenhouseWatch(userId: number, sourceName: string, boardToken: string, companyName: string) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  const existing = (
-    await db.select().from(sourceConfigs).where(and(eq(sourceConfigs.userId, userId), eq(sourceConfigs.name, sourceName))).limit(1)
-  )[0];
   const values = {
     userId,
     name: sourceName,
@@ -194,11 +194,8 @@ export async function registerGreenhouseWatch(userId: number, sourceName: string
     enabled: true,
     lastStatus: `Watching ${companyName}'s Greenhouse board`,
   };
-  if (existing) {
-    await db.update(sourceConfigs).set(values).where(eq(sourceConfigs.id, existing.id));
-    return;
-  }
-  await db.insert(sourceConfigs).values(values);
+  // Native upsert, same reasoning as ensureSourceEnabled above.
+  await db.insert(sourceConfigs).values(values).onDuplicateKeyUpdate({ set: values });
 }
 
 export async function disableGreenhouseWatch(userId: number, sourceName: string): Promise<boolean> {

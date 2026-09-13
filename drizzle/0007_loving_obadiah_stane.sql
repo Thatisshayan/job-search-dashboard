@@ -1,0 +1,1 @@
+ALTER TABLE `source_configs` ADD CONSTRAINT `source_configs_user_name_unique` UNIQUE(`userId`,`name`);

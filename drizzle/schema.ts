@@ -86,7 +86,10 @@ export const sourceConfigs = mysqlTable(
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  table => [index("source_configs_user_idx").on(table.userId)],
+  table => [
+    index("source_configs_user_idx").on(table.userId),
+    uniqueIndex("source_configs_user_name_unique").on(table.userId, table.name),
+  ],
 );
 
 export const jobRuns = mysqlTable(

@@ -758,6 +758,30 @@ users -- the gaps found were all within one user's own concurrent-request handli
 
 **Not yet live-tested** against the real Railway deployment under actual concurrent load.
 
+## Phase 19 — Drop OpenRouter, call Nvidia's own API directly ✅ built
+
+See DECISIONS.md D4's 2026-09-13 update for the full reasoning: OpenRouter had become a pure pass-through to
+Nvidia anyway (this account's privacy setting already restricted every request to the `nvidia` provider), so
+explicitly requested connecting to Nvidia's own API (`https://integrate.api.nvidia.com/v1`) directly instead.
+
+- [x] Verified live before switching: this account's Nvidia model does honor `response_format`/`json_schema`
+  (every LLM call site requires it) — it's a reasoning model that emits a "thinking" preamble before its
+  schema-conforming answer, so a low `max_tokens` cap can cut it off before it ever reaches the JSON. No call
+  site in this codebase sets `max_tokens`, so this doesn't bite in practice.
+- [x] `server/_core/env.ts`/`server/_core/llm.ts` (the only two files coupled to OpenRouter-specific config,
+  confirmed via grep) switched to `NVIDIA_API_KEY`/`NVIDIA_BASE_URL`; `DEFAULT_OPENROUTER_MODEL` renamed
+  `DEFAULT_NVIDIA_MODEL = "nvidia/nemotron-3-super-120b-a12b"` (Nvidia's own catalog slug, no OpenRouter's
+  `:free` tagging convention).
+- [x] Confirmed end-to-end through the real `invokeLLM` code path (not just raw curl): a real call returned
+  `{"name": "Sarah", "age": 42}` from `nvidia/nemotron-3-super-120b-a12b`.
+- [x] `pnpm check`/`test` clean (133 tests, unchanged — LLM calls are mocked in tests).
+
+**Caveat carried forward:** the reasoning preamble means real calls burn more tokens (and take longer) before
+reaching their structured answer than a non-reasoning model would — acceptable for now, worth knowing if
+latency/cost becomes a concern serving several users.
+
+**Not yet live-tested** against the real Railway deployment (needs `NVIDIA_API_KEY` set there and a redeploy).
+
 ## Phase 9 — Retire or shrink the web dashboard
 
 - [ ] Decide: keep `client/` as a thin read-only admin/debug view, or remove it once the bot covers the full loop

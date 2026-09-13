@@ -727,6 +727,37 @@ cross-source duplicate live — that remains proven only by `crossSourceDedup.te
 and integration tests. Revisit once a real run happens to surface an actual overlapping-employer case, or
 deliberately construct one (e.g. `/watch` a Greenhouse company whose jobs also appear on Adzuna/Indeed).
 
+## Phase 18 — Multi-tenant stability hardening ✅ built
+
+General hardening pass ahead of wider rollout (not triggered by a specific incident), per D3's note that
+multi-user "can be revisited once the single-user flow is proven reliable." A real audit found data isolation
+itself already solid everywhere checked; these fixes close the gaps that were real. See
+`docs/superpowers/specs/2026-09-12-multi-tenant-stability-design.md` for the full audit and design.
+
+- [x] `scheduler.ts`'s `tick()` now guards against overlapping calls (in-process flag) -- closes a live bug, not
+  just a scale concern: Indeed's Apify actor alone can poll up to 5 minutes per title, so a tick could already run
+  past its own 60s interval with just a couple of users.
+- [x] Both `runJobSearchForUser` (career track) and `runGeneralWorkSearchForUser` (general-work track) now claim
+  their `jobRuns` row **before** calling any discovery source, not after all three sources finish -- closes the
+  actual race window `alreadyRanToday` depends on. Phase 17's restructuring had made this gap wider for the
+  career track, not narrower.
+- [x] `sourceConfigs` gained a real `(userId, name)` unique constraint (migration `0007_loving_obadiah_stane.sql`),
+  and `ensureSourceEnabled`/`registerGreenhouseWatch` switched from read-then-insert to a native MySQL upsert --
+  race-safe at the database level regardless of what triggers concurrent calls.
+- [x] Telegram webhook handling is now serialized per chat (`server/telegramBot/chatLock.ts`) -- a double-tap or
+  Telegram's own retry can no longer race two onboarding-step handlers for the same chat. Different chats still
+  process fully concurrently.
+- [x] Re-scoped out during design: a dedicated fairness/rate-limiting system for the shared Adzuna/Apify/
+  OpenRouter API keys -- traced back to the same root cause as the scheduler fix (a long-running sequential tick,
+  not a true concurrent burst), so no separate system was built. Revisit if real usage shows otherwise.
+- [x] `pnpm check`/`test` clean (133 tests, up from 125).
+
+**Confirmed already solid, no changes needed:** per-user data isolation (every scoped query already filters
+correctly) and per-user resource scoping (Greenhouse watches, source configs) were already race-free *across*
+users -- the gaps found were all within one user's own concurrent-request handling, not cross-user leakage.
+
+**Not yet live-tested** against the real Railway deployment under actual concurrent load.
+
 ## Phase 9 — Retire or shrink the web dashboard
 
 - [ ] Decide: keep `client/` as a thin read-only admin/debug view, or remove it once the bot covers the full loop

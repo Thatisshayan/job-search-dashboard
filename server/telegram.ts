@@ -151,6 +151,12 @@ export const BOT_COMMANDS: Array<{ command: string; description: string; usage?:
     description: "Update your search, track, or resume without starting over",
     usage: "/edit — update roles/location, radius, and daily-check schedule\n/edit track — switch between immediate/general work and career-focused work\n/edit resume — replace your resume (upload, paste, paste a profile link, or have me build one)",
   },
+  {
+    command: "country",
+    description: "Set the country your automatic search runs against",
+    usage: "/country — show your current setting\n/country <code> — set a two-letter country code (e.g. /country us)\n/country reset — go back to this deployment's default",
+  },
+  { command: "status", description: "Show your current resume, search settings, and schedule at a glance" },
   { command: "help", description: "Show this list of commands" },
 ];
 

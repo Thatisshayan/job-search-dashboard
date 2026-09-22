@@ -6,6 +6,9 @@ import { downloadAndParseResume, isSupportedResumeMime, parseResumeText } from "
 import { handleUnwatchCommand, handleWatchCommand, handleWatchingCommand } from "./watch";
 import { handleGeneralWorkCommand, runGeneralWorkAndNotify } from "./generalWork";
 import { fetchPublicProfileText, isSupportedProfileUrl } from "../profileImport/publicProfile";
+import { suggestTargetTitles } from "./titleSuggestions";
+import { handleCountryCommand } from "./country";
+import { handleStatusCommand } from "./status";
 
 type BotConversation = NonNullable<Awaited<ReturnType<typeof getConversation>>>;
 
@@ -70,6 +73,12 @@ export async function handleIncomingMessage(message: TelegramIncomingMessage): P
     return;
   }
 
+  if (command === "/status") {
+    const user = await getOrCreateUserForChat(chatId, message.chat.username ?? "");
+    await handleStatusCommand(chatId, user.id);
+    return;
+  }
+
   const watchCommand = message.text ? /^\/(watch|unwatch|watching)(?:@\S+)?(?:\s+(.*))?$/.exec(message.text.trim()) : null;
   if (watchCommand) {
     const user = await getOrCreateUserForChat(chatId, message.chat.username ?? "");
@@ -91,6 +100,13 @@ export async function handleIncomingMessage(message: TelegramIncomingMessage): P
   if (editCommand) {
     const user = await getOrCreateUserForChat(chatId, message.chat.username ?? "");
     await handleEditCommand(chatId, user.id, (editCommand[1] ?? "").trim().toLowerCase());
+    return;
+  }
+
+  const countryCommand = message.text ? /^\/country(?:@\S+)?(?:\s+(.*))?$/.exec(message.text.trim()) : null;
+  if (countryCommand) {
+    const user = await getOrCreateUserForChat(chatId, message.chat.username ?? "");
+    await handleCountryCommand(chatId, user.id, countryCommand[1] ?? "");
     return;
   }
 
@@ -336,6 +352,22 @@ async function handleResumeBuildIntake(chatId: string, userId: number, intakeTex
   }
 }
 
+/**
+ * Phase 13: never lets a suggestion failure block onboarding — same
+ * "graceful degradation" treatment this codebase already gives to every
+ * other best-effort side call (notifyOwner, public-profile fetch, PDF
+ * summary fallback). A user who gets no suggestions just sees today's
+ * plain "what roles are you targeting?" prompt.
+ */
+async function safeSuggestTargetTitles(profile: Parameters<typeof saveCandidateProfile>[1]): Promise<string[]> {
+  try {
+    return await suggestTargetTitles(profile);
+  } catch (error) {
+    console.error("[TelegramBot] Target-title suggestion failed", error);
+    return [];
+  }
+}
+
 async function finishResumeIntake(chatId: string, userId: number, profile: Parameters<typeof saveCandidateProfile>[1], context: Record<string, unknown>): Promise<void> {
   await saveCandidateProfile(userId, profile);
   const greeting = `Thanks, ${profile.displayName || "there"}!`;
@@ -344,6 +376,14 @@ async function finishResumeIntake(chatId: string, userId: number, profile: Param
     await sendPlainMessage(chatId, `${greeting} What city or region should I search near? (e.g. "Toronto, Ontario")`);
     return;
   }
-  await setConversationState(chatId, "awaiting_target_titles", { track: "career" });
-  await sendPlainMessage(chatId, `${greeting} I've read your resume.\n\nWhat roles are you targeting? List one or more, separated by commas.`);
+
+  const suggestedTitles = await safeSuggestTargetTitles(profile);
+  const nextContext: Record<string, unknown> = { track: "career" };
+  let prompt = `${greeting} I've read your resume.\n\nWhat roles are you targeting? List one or more, separated by commas.`;
+  if (suggestedTitles.length > 0) {
+    nextContext.suggestedTargetTitles = suggestedTitles;
+    prompt = `${greeting} I've read your resume.\n\nBased on it, you might target: ${suggestedTitles.join(", ")}.\n\nReply "yes" to use these, or list your own roles separated by commas.`;
+  }
+  await setConversationState(chatId, "awaiting_target_titles", nextContext);
+  await sendPlainMessage(chatId, prompt);
 }

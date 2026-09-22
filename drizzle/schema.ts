@@ -63,6 +63,12 @@ export const searchSettings = mysqlTable(
     // (most users never need it; adding a mandatory step would add friction
     // for the common case). See ROADMAP.md's Phase 4 "still open" note.
     country: varchar("country", { length: 2 }),
+    // Phase 12: additional cities beyond `city` (which stays the required
+    // "primary" one — onboarding is unchanged). Null/empty for every
+    // existing/new user by default; set via /cities. server/scoring.ts's
+    // resolveTargetCities() is the one place that folds this + `city` into
+    // the single list every real caller should use.
+    targetCities: json("targetCities").$type<string[]>(),
     radiusKm: int("radiusKm").notNull().default(75),
     employmentTypes: json("employmentTypes").$type<string[]>().notNull(),
     minimumScore: int("minimumScore").notNull().default(60),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SCORE_WEIGHTS, scoreJob } from "./scoring";
+import { SCORE_WEIGHTS, scoreJob, resolveTargetCities } from "./scoring";
 
 describe("scoreJob", () => {
   it("preserves the six required component weights for a strong active in-radius full-time match", () => {
@@ -14,7 +14,7 @@ describe("scoreJob", () => {
       skillMatches: ["permit coordination", "OBC compliance", "subcontractor management", "trade scheduling", "budget tracking"],
       seniorityMatch: "strong",
       targetTitles: ["Construction Project Manager"],
-      targetCity: "Toronto, Ontario",
+      targetCities: ["Toronto, Ontario"],
       targetRadiusKm: 75,
     });
 
@@ -40,7 +40,7 @@ describe("scoreJob", () => {
       skillMatches: ["Go", "TypeScript", "PostgreSQL", "Kafka", "Docker"],
       seniorityMatch: "strong",
       targetTitles: ["Backend Software Engineer", "Backend Developer"],
-      targetCity: "Montreal, Quebec",
+      targetCities: ["Montreal, Quebec"],
       targetRadiusKm: 25,
     });
 
@@ -59,7 +59,7 @@ describe("scoreJob", () => {
       isDuplicate: true,
       seniorityMatch: "weak",
       targetTitles: ["Estimator"],
-      targetCity: "Toronto, Ontario",
+      targetCities: ["Toronto, Ontario"],
       targetRadiusKm: 75,
     });
 
@@ -93,7 +93,7 @@ describe("scoreJob", () => {
       postedAt: new Date(),
       seniorityMatch: "partial",
       targetTitles: ["Construction Coordinator"],
-      targetCity: "Toronto, Ontario",
+      targetCities: ["Toronto, Ontario"],
       targetRadiusKm: 75,
     });
 
@@ -107,7 +107,7 @@ describe("scoreJob", () => {
       location: "Some Town",
       locationKm: 40,
       targetTitles: ["Estimator"],
-      targetCity: "Toronto, Ontario",
+      targetCities: ["Toronto, Ontario"],
       targetRadiusKm: 50,
     });
     const outsideRadius = scoreJob({
@@ -116,11 +116,59 @@ describe("scoreJob", () => {
       location: "Toronto, Ontario", // text would match, but the real distance doesn't
       locationKm: 120,
       targetTitles: ["Estimator"],
-      targetCity: "Toronto, Ontario",
+      targetCities: ["Toronto, Ontario"],
       targetRadiusKm: 50,
     });
 
     expect(withinRadius.locationCommuteFit).toBe(SCORE_WEIGHTS.locationCommuteFit);
     expect(outsideRadius.locationCommuteFit).toBe(0);
+  });
+
+  it("matches a job against ANY configured target city, not just the first (Phase 12)", () => {
+    const result = scoreJob({
+      title: "Estimator",
+      description: "A role.",
+      location: "Montreal, Quebec",
+      targetTitles: ["Estimator"],
+      targetCities: ["Toronto, Ontario", "Montreal, Quebec"],
+      targetRadiusKm: 50,
+    });
+
+    expect(result.locationCommuteFit).toBe(SCORE_WEIGHTS.locationCommuteFit);
+  });
+
+  it("scores 0 location fit when the job matches none of several target cities", () => {
+    const result = scoreJob({
+      title: "Estimator",
+      description: "A role.",
+      location: "Vancouver, British Columbia",
+      targetTitles: ["Estimator"],
+      targetCities: ["Toronto, Ontario", "Montreal, Quebec"],
+      targetRadiusKm: 50,
+    });
+
+    expect(result.locationCommuteFit).toBe(0);
+  });
+});
+
+describe("resolveTargetCities", () => {
+  it("returns just the primary city when no extras are set", () => {
+    expect(resolveTargetCities({ city: "Toronto, Ontario" })).toEqual(["Toronto, Ontario"]);
+    expect(resolveTargetCities({ city: "Toronto, Ontario", targetCities: null })).toEqual(["Toronto, Ontario"]);
+    expect(resolveTargetCities({ city: "Toronto, Ontario", targetCities: [] })).toEqual(["Toronto, Ontario"]);
+  });
+
+  it("puts the primary city first, followed by the extras", () => {
+    expect(resolveTargetCities({ city: "Toronto, Ontario", targetCities: ["Montreal, Quebec"] })).toEqual([
+      "Toronto, Ontario",
+      "Montreal, Quebec",
+    ]);
+  });
+
+  it("de-duplicates case-insensitively, keeping the first casing seen", () => {
+    expect(resolveTargetCities({ city: "Toronto, Ontario", targetCities: ["toronto, ontario", "Montreal, Quebec"] })).toEqual([
+      "Toronto, Ontario",
+      "Montreal, Quebec",
+    ]);
   });
 });

@@ -157,6 +157,11 @@ export const BOT_COMMANDS: Array<{ command: string; description: string; usage?:
     usage: "/country — show your current setting\n/country <code> — set a two-letter country code (e.g. /country us)\n/country reset — go back to this deployment's default",
   },
   { command: "status", description: "Show your current resume, search settings, and schedule at a glance" },
+  {
+    command: "cities",
+    description: "Search more than one city at once, alongside your primary one",
+    usage: "/cities — show what you're currently searching\n/cities add <city> — search another city too\n/cities remove <city> — drop one of the extras\n/cities reset — back to just your primary city",
+  },
   { command: "help", description: "Show this list of commands" },
 ];
 

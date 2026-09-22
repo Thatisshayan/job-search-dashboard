@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { candidateProfiles } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { sendPlainMessage } from "../telegram";
+import { resolveTargetCities } from "../scoring";
 import { getSearchSettingsForUser, listGreenhouseWatches } from "./db";
 
 /**
@@ -40,8 +41,9 @@ export async function handleStatusCommand(chatId: string, userId: number): Promi
     lines.push(`Target roles: ${settings.targetTitles.length ? settings.targetTitles.join(", ") : "none set"}`);
   }
 
+  const cities = resolveTargetCities(settings);
   lines.push(
-    `Location: ${settings.city} (within ${settings.radiusKm} km)`,
+    `Location: ${cities.join(", ")} (within ${settings.radiusKm} km of each)`,
     `Search country: ${settings.country ? settings.country : "this deployment's default"}`,
     `Daily automatic check: ${settings.dailyNotificationEnabled ? `on, ${settings.scheduledTime} ${settings.timezone}` : "off — /edit to enable"}`,
     `General-work matching: ${settings.generalWorkEnabled ? "on" : "off"}`,

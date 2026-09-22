@@ -7,6 +7,7 @@ import { ADZUNA_SOURCE_NAME, adzunaJobToVerifiedListing, isAdzunaConfigured, sea
 import { greenhouseBoardJobToVerifiedListing, searchGreenhouseBoardJobs } from "../jobSearch/greenhouseBoard";
 import { INDEED_SOURCE_NAME, indeedJobToVerifiedListing, isApifyConfigured, searchIndeedJobs } from "../jobSearch/indeedApify";
 import { findDuplicateGroups, groupByEmployer, pickMostComplete } from "../jobSearch/crossSourceDedup";
+import { resolveTargetCities } from "../scoring";
 import { ensureSourceEnabled, listGreenhouseWatches } from "./db";
 
 export type JobSearchOutcome =
@@ -47,21 +48,31 @@ export async function runJobSearchForUser(userId: number): Promise<JobSearchOutc
   const claimInsert = await db.insert(jobRuns).values({ userId, status: "running" });
   const claimRunId = resultHeader(claimInsert).insertId;
 
+  // Phase 12: searches every configured city, not just the primary one.
+  // Multiplies external calls by cities.length on top of titles.length — for
+  // Adzuna (free tier) this is negligible; for Indeed-via-Apify (paid per
+  // result, ~$0.05/1,000) it's still fractions of a cent/day at single-user
+  // scale, but it does multiply how long a run takes (each source's calls
+  // are sequential, unchanged from before) — see ROADMAP.md Phase 12.
+  const targetCities = resolveTargetCities(settings);
+
   try {
     const adzunaListings: VerifiedListing[] = [];
     if (isAdzunaConfigured()) {
       const seen = new Map<string, VerifiedListing>();
-      for (const title of settings.targetTitles) {
-        let results;
-        try {
-          results = await searchAdzunaJobs({ what: title, where: settings.city, distanceKm: settings.radiusKm, resultsPerPage: 10, country: settings.country ?? undefined });
-        } catch (error) {
-          console.error(`[jobSearch] Adzuna search failed for title "${title}"`, error);
-          continue;
-        }
-        for (const job of results) {
-          const listing = adzunaJobToVerifiedListing(job);
-          if (listing) seen.set(`${listing.sourceName}:${listing.sourceExternalId}`, listing);
+      for (const city of targetCities) {
+        for (const title of settings.targetTitles) {
+          let results;
+          try {
+            results = await searchAdzunaJobs({ what: title, where: city, distanceKm: settings.radiusKm, resultsPerPage: 10, country: settings.country ?? undefined });
+          } catch (error) {
+            console.error(`[jobSearch] Adzuna search failed for title "${title}" in "${city}"`, error);
+            continue;
+          }
+          for (const job of results) {
+            const listing = adzunaJobToVerifiedListing(job);
+            if (listing) seen.set(`${listing.sourceName}:${listing.sourceExternalId}`, listing);
+          }
         }
       }
       adzunaListings.push(...Array.from(seen.values()).slice(0, 20));
@@ -70,17 +81,19 @@ export async function runJobSearchForUser(userId: number): Promise<JobSearchOutc
     const indeedListings: VerifiedListing[] = [];
     if (isApifyConfigured()) {
       const seen = new Map<string, VerifiedListing>();
-      for (const title of settings.targetTitles) {
-        let results;
-        try {
-          results = await searchIndeedJobs({ what: title, where: settings.city, distanceKm: settings.radiusKm });
-        } catch (error) {
-          console.error(`[jobSearch] Indeed search failed for title "${title}"`, error);
-          continue;
-        }
-        for (const job of results) {
-          const listing = indeedJobToVerifiedListing(job);
-          if (listing) seen.set(`${listing.sourceName}:${listing.sourceExternalId}`, listing);
+      for (const city of targetCities) {
+        for (const title of settings.targetTitles) {
+          let results;
+          try {
+            results = await searchIndeedJobs({ what: title, where: city, distanceKm: settings.radiusKm });
+          } catch (error) {
+            console.error(`[jobSearch] Indeed search failed for title "${title}" in "${city}"`, error);
+            continue;
+          }
+          for (const job of results) {
+            const listing = indeedJobToVerifiedListing(job);
+            if (listing) seen.set(`${listing.sourceName}:${listing.sourceExternalId}`, listing);
+          }
         }
       }
       indeedListings.push(...Array.from(seen.values()).slice(0, 20));
@@ -236,19 +249,23 @@ export async function runGeneralWorkSearchForUser(userId: number): Promise<Gener
   const claimInsert = await db.insert(jobRuns).values({ userId, status: "running" });
   const claimRunId = resultHeader(claimInsert).insertId;
 
+  const targetCities = resolveTargetCities(settings);
+
   try {
     const seen = new Map<string, VerifiedListing>();
-    for (const title of GENERAL_WORK_TITLES) {
-      let results;
-      try {
-        results = await searchAdzunaJobs({ what: title, where: settings.city, distanceKm: settings.radiusKm, resultsPerPage: 5, country: settings.country ?? undefined });
-      } catch (error) {
-        console.error(`[generalWorkSearch] Adzuna search failed for title "${title}"`, error);
-        continue;
-      }
-      for (const job of results) {
-        const listing = adzunaJobToVerifiedListing(job);
-        if (listing) seen.set(`${listing.sourceExternalId ?? listing.sourcePostingUrl}`, listing);
+    for (const city of targetCities) {
+      for (const title of GENERAL_WORK_TITLES) {
+        let results;
+        try {
+          results = await searchAdzunaJobs({ what: title, where: city, distanceKm: settings.radiusKm, resultsPerPage: 5, country: settings.country ?? undefined });
+        } catch (error) {
+          console.error(`[generalWorkSearch] Adzuna search failed for title "${title}" in "${city}"`, error);
+          continue;
+        }
+        for (const job of results) {
+          const listing = adzunaJobToVerifiedListing(job);
+          if (listing) seen.set(`${listing.sourceExternalId ?? listing.sourcePostingUrl}`, listing);
+        }
       }
     }
     const listings = Array.from(seen.values()).slice(0, GENERAL_WORK_RESULTS_CAP);

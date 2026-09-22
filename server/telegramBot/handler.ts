@@ -9,6 +9,7 @@ import { fetchPublicProfileText, isSupportedProfileUrl } from "../profileImport/
 import { suggestTargetTitles } from "./titleSuggestions";
 import { handleCountryCommand } from "./country";
 import { handleStatusCommand } from "./status";
+import { handleCitiesCommand } from "./cities";
 
 type BotConversation = NonNullable<Awaited<ReturnType<typeof getConversation>>>;
 
@@ -107,6 +108,13 @@ export async function handleIncomingMessage(message: TelegramIncomingMessage): P
   if (countryCommand) {
     const user = await getOrCreateUserForChat(chatId, message.chat.username ?? "");
     await handleCountryCommand(chatId, user.id, countryCommand[1] ?? "");
+    return;
+  }
+
+  const citiesCommand = message.text ? /^\/cities(?:@\S+)?(?:\s+(.*))?$/.exec(message.text.trim()) : null;
+  if (citiesCommand) {
+    const user = await getOrCreateUserForChat(chatId, message.chat.username ?? "");
+    await handleCitiesCommand(chatId, user.id, citiesCommand[1] ?? "");
     return;
   }
 

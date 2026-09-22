@@ -11,7 +11,7 @@ import {
 } from "../drizzle/schema";
 import { getDb, ensureDashboardSetup } from "./db";
 import { notifyOwner } from "./_core/notification";
-import { scoreJob, type ScoreResult } from "./scoring";
+import { resolveTargetCities, scoreJob, type ScoreResult } from "./scoring";
 import { getLocalDateKey } from "./utils/date";
 
 export type VerifiedListing = {
@@ -164,7 +164,7 @@ export async function importVerifiedListingBatch(
         skillMatches,
         seniorityMatch: listing.seniorityMatch,
         targetTitles: settings[0].targetTitles,
-        targetCity: settings[0].city,
+        targetCities: resolveTargetCities(settings[0]),
         targetRadiusKm: settings[0].radiusKm,
       });
       await db

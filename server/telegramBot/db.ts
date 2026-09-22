@@ -164,6 +164,17 @@ export async function setUserCountry(userId: number, country: string | null): Pr
 }
 
 /**
+ * Phase 12: sets the *additional* cities beyond a user's primary `city` (see
+ * scoring.ts's resolveTargetCities). `null`/empty clears back to single-city
+ * mode. /cities (telegramBot/cities.ts) is the only caller.
+ */
+export async function setUserTargetCities(userId: number, targetCities: string[] | null): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(searchSettings).set({ targetCities: targetCities && targetCities.length > 0 ? targetCities : null }).where(eq(searchSettings.userId, userId));
+}
+
+/**
  * importVerifiedListingBatch requires an existing, enabled sourceConfigs row
  * matching the batch's sourceName — auto-provision one for a bot user the
  * first time an automated search runs for them, rather than requiring a

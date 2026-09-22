@@ -13,7 +13,7 @@ import {
   updateSourceEnabled,
   updateSettings,
 } from "./db";
-import { scoreJob } from "./scoring";
+import { resolveTargetCities, scoreJob } from "./scoring";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -199,7 +199,7 @@ export const appRouter = router({
         return scoreJob({
           ...input,
           targetTitles: settings?.targetTitles,
-          targetCity: settings?.city,
+          targetCities: settings ? resolveTargetCities(settings) : undefined,
           targetRadiusKm: settings?.radiusKm,
         });
       }),

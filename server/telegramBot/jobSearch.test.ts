@@ -89,6 +89,22 @@ describe("runJobSearchForUser", () => {
     expect(result.ok).toBe(false);
     expect(result.ok === false && result.reason).toBe("no_results");
   });
+
+  it("searches every configured city, not just the primary one (Phase 12)", async () => {
+    const multiCityRow = { ...settingsRow, targetCities: ["Montreal"] };
+    getDb.mockResolvedValue({
+      ...mockDb(),
+      select: () => ({ from: () => ({ where: () => ({ limit: async () => [multiCityRow] }) }) }),
+    });
+    searchAdzunaJobs.mockResolvedValue([]);
+    searchIndeedJobs.mockResolvedValue([]);
+
+    await runJobSearchForUser(1);
+
+    const searchedCities = searchAdzunaJobs.mock.calls.map(call => call[0].where);
+    expect(searchedCities).toEqual(expect.arrayContaining(["Toronto", "Montreal"]));
+    expect(searchAdzunaJobs).toHaveBeenCalledTimes(2); // one title x two cities
+  });
 });
 
 describe("runJobSearchForUser claims its jobRuns row early", () => {

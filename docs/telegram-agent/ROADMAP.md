@@ -525,19 +525,70 @@ technique was worth adopting:
   at all). Found via direct user report with a resume deliberately
   containing irrelevant experience.
 
-## Phase 12 — Multi-region search (noted, not built)
+## Phase 12 — Multi-region search ✅ built, not yet live-tested
 
-Raised by the user 2026-08-31: search only ever covers one city/radius —
-confirmed real, not a matching bug. `search_settings` has exactly one
-`city` + `radiusKm` per user (unique index on `userId`), so e.g. Toronto
-and Montreal can't both be searched at once today. Needs a real design
-decision before building — either `targetCities: string[]` replacing the
-single `city` field (bigger change: Adzuna/Greenhouse-watch queries,
-scoring's `isWithinTargetRadius`, and onboarding all assume one city), or
-a `/city` command that swaps the active single region on demand (smaller
-change, but the user has to manually switch back and forth rather than
-getting both regions' results together). Not started — needs that choice
-made first.
+Raised by the user 2026-08-31: search only ever covered one city/radius —
+confirmed real, not a matching bug. Built 2026-09-22, once the user
+explicitly approved the real tradeoff (see below).
+
+**Design chosen: additive `targetCities`, not a `city` replacement.** The
+originally-scoped bigger option (`targetCities: string[]` replacing the
+single `city` field) would have needed a real data migration on production
+data for the one already-onboarded real user; the smaller option (a
+`/city` swap command) was rejected as basically redundant with `/edit`'s
+existing city-change flow and doesn't deliver "both regions together" at
+all. Instead: `city` stays the required "primary" city (onboarding
+unchanged), and a new nullable `search_settings.targetCities` (json,
+migration `0009_early_bloodscream.sql`) holds *additional* cities. Same
+additive-migration pattern this project has used for every schema change
+so far (`generalWorkEnabled`, `track`, `country`) — no column drop, no
+data-migrating SQL, zero risk to the existing real user's row.
+
+- [x] `scoring.ts`'s new `resolveTargetCities(settings)` is the one place
+  that folds `city` + `targetCities` into a single ordered, deduplicated
+  list — every real caller uses it instead of reading either field
+  directly. `isWithinTargetRadius` now matches a job against ANY
+  configured city, not just one; `ScoreInput.targetCity` (singular)
+  renamed to `targetCities` (array) throughout — `verifiedListingImport.ts`
+  and `routers.ts`'s `previewScore` both updated.
+- [x] New `/cities` command (`telegramBot/cities.ts`): `add`/`remove`/
+  `reset`/show-current, mirroring `/watch`'s list-management pattern.
+  `/cities remove` only ever touches the *extra* list — removing the
+  primary city would leave the required field with nothing to fall back
+  to, so that's still `/edit`'s job, and the command says so.
+- [x] `telegramBot/jobSearch.ts`'s Adzuna/Indeed search loops (both the
+  main career-track search and the general-work track) now loop over
+  every target city, not just the primary one — multiplies external calls
+  by `cities.length` on top of `titles.length`.
+- [x] `/status` updated to show the full resolved city list.
+- [x] Tests: `resolveTargetCities`/multi-city `isWithinTargetRadius` cases
+  in `scoring.test.ts`, `cities.test.ts` (mocked DB, same pattern as
+  `country.test.ts`), a multi-city search-looping case in
+  `jobSearch.test.ts`. `pnpm check`/`test`/`build` all clean (181 tests,
+  up from 167).
+- [x] **Verified against a real local MySQL 8 container**: applied the
+  full migration chain cleanly, confirmed `targetCities` is `json NULL`
+  via `DESCRIBE`, then ran the actual onboarding/`/cities` code
+  end-to-end against it — `saveSearchSettingsFromOnboarding` →
+  `resolveTargetCities` (just the primary) → `setUserTargetCities` (adds
+  Montreal, then Ottawa) → `resolveTargetCities` reflects each addition
+  correctly → reset back to just the primary — all through the real
+  Drizzle layer.
+
+**Real cost tradeoff, explicitly approved by the user before building**:
+at single-user scale this is negligible — Adzuna's free tier is "hundreds
+of calls/day" and even doubling/tripling city coverage stays well under
+that; Indeed-via-Apify is billed per result (~$0.05/1,000), so doubling
+results is still fractions of a cent/day. The real cost concern is at
+multi-user scale (D3 territory), not today. **Not evaluated**: the time
+cost. Each source's calls are still sequential (unchanged from before),
+so adding cities multiplies how long one search run takes, not just its
+external-API cost — worth watching if a user adds several cities at once,
+though Phase 18's scheduler overlap-guard means a slow run can't corrupt
+anything, only delay.
+
+**Not yet live-tested** — no real `/cities add <city>` → search cycle has
+been run against a real Telegram chat yet.
 
 ## Phase 13 — Suggest related target roles from the parsed résumé ✅ built, not yet live-tested
 

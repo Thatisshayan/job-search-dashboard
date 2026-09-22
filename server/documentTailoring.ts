@@ -73,30 +73,49 @@ function flattenSkills(skills: Record<string, string[]>): string[] {
 }
 
 /**
+ * Filters raw LLM output against the real profile before it's trusted —
+ * belt and suspenders on top of the prompt rules, since experienceIndex/
+ * skillsToHighlight are used to assemble the actual resume document
+ * afterward and must never reference something that isn't real. Shared by
+ * both the initial draft (`generateTailoredMaterials`) and the review pass
+ * (`reviewTailoredMaterials`) below — the reviewer's output is itself LLM
+ * output and needs the exact same guardrail, not just the first draft's.
+ */
+function validateAgainstProfile(profile: ProfileForTailoring, parsed: RawTailoredMaterials): TailoredMaterials {
+  const validIndexes = new Set(profile.experience.map((_, index) => index));
+  const realSkills = new Set(flattenSkills(profile.skills));
+
+  return {
+    ...parsed,
+    experienceBullets: parsed.experienceBullets.filter(entry => validIndexes.has(entry.experienceIndex)),
+    skillsToHighlight: parsed.skillsToHighlight.filter(skill => realSkills.has(skill)),
+  };
+}
+
+function buildProfileText(profile: ProfileForTailoring): string {
+  return JSON.stringify(
+    {
+      name: profile.displayName,
+      headline: profile.headline,
+      skills: profile.skills,
+      experience: profile.experience.map((entry, index) => ({ index, ...entry })),
+      education: profile.education,
+    },
+    null,
+    2
+  );
+}
+
+/**
  * Generates tailored materials, then validates the LLM's output against the
- * real profile before trusting it — belt and suspenders on top of the prompt
- * rules, since experienceIndex/skillsToHighlight are used to assemble the
- * actual resume document afterward and must never reference something that
- * isn't real.
+ * real profile before trusting it (see `validateAgainstProfile`).
  */
 export async function generateTailoredMaterials(input: {
   profile: ProfileForTailoring;
   job: { title: string; employer: string; description: string };
   scoreRationale?: string;
 }): Promise<TailoredMaterials> {
-  const profileText = JSON.stringify(
-    {
-      name: input.profile.displayName,
-      headline: input.profile.headline,
-      skills: input.profile.skills,
-      experience: input.profile.experience.map((entry, index) => ({ index, ...entry })),
-      education: input.profile.education,
-    },
-    null,
-    2
-  );
-
-  const userContent = `CANDIDATE PROFILE (verified facts only — do not use anything outside this):\n${profileText}\n\nJOB\nTitle: ${input.job.title}\nEmployer: ${input.job.employer}\nDescription: ${input.job.description.slice(0, 4000)}\n${input.scoreRationale ? `\nWhy this job was matched: ${input.scoreRationale}` : ""}`;
+  const userContent = `CANDIDATE PROFILE (verified facts only — do not use anything outside this):\n${buildProfileText(input.profile)}\n\nJOB\nTitle: ${input.job.title}\nEmployer: ${input.job.employer}\nDescription: ${input.job.description.slice(0, 4000)}\n${input.scoreRationale ? `\nWhy this job was matched: ${input.scoreRationale}` : ""}`;
 
   const result = await invokeLLM({
     messages: [
@@ -111,14 +130,69 @@ export async function generateTailoredMaterials(input: {
   if (!raw) throw new Error("The document-tailoring step returned an empty response");
   const parsed = JSON.parse(raw) as RawTailoredMaterials;
 
-  const validIndexes = new Set(input.profile.experience.map((_, index) => index));
-  const realSkills = new Set(flattenSkills(input.profile.skills));
+  return validateAgainstProfile(input.profile, parsed);
+}
 
-  return {
-    ...parsed,
-    experienceBullets: parsed.experienceBullets.filter(entry => validIndexes.has(entry.experienceIndex)),
-    skillsToHighlight: parsed.skillsToHighlight.filter(skill => realSkills.has(skill)),
-  };
+const REVIEWER_SYSTEM_PROMPT = `You are a second, independent reviewer critiquing a first-draft tailored resume/cover letter before it's sent to a real employer. You will be shown the candidate's real profile, the job, and the first draft.
+
+Your job: produce an IMPROVED version in the same JSON shape — tighter phrasing, better relevance ordering, a stronger cover letter — while holding the exact same hard rules the first draft was written under:
+- Use ONLY facts present in the candidate profile provided below. Never invent or infer licensure, certifications, work authorization, years of experience, or achievements not stated — including facts the first draft may have gotten wrong; if you find one, remove it and add it to gapsToMention if relevant instead.
+- Reference experience entries only by their real zero-based index in the profile's experience array.
+- Only list skills copied verbatim from the profile's skills.
+- If the draft is already good, it's fine to return it close to unchanged — this is a quality pass, not a rewrite-for-its-own-sake pass.`;
+
+/**
+ * Phase 11 (ROADMAP.md): a second LLM pass that critiques and improves the
+ * first draft before it's used. Doubles the LLM cost of tailoring a job
+ * (one extra call per approved application, same trigger point as the
+ * existing draft call — not a new, unbounded cost surface), in exchange for
+ * the "plausible quality lift" ROADMAP.md flagged. Reuses
+ * `validateAgainstProfile` on the reviewer's own output too, since a
+ * reviewer LLM call can hallucinate exactly like a drafter one can.
+ */
+export async function reviewTailoredMaterials(input: {
+  profile: ProfileForTailoring;
+  job: { title: string; employer: string; description: string };
+  draft: TailoredMaterials;
+}): Promise<TailoredMaterials> {
+  const userContent = `CANDIDATE PROFILE (verified facts only — do not use anything outside this):\n${buildProfileText(input.profile)}\n\nJOB\nTitle: ${input.job.title}\nEmployer: ${input.job.employer}\nDescription: ${input.job.description.slice(0, 4000)}\n\nFIRST DRAFT TO REVIEW AND IMPROVE:\n${JSON.stringify(input.draft, null, 2)}`;
+
+  const result = await invokeLLM({
+    messages: [
+      { role: "system", content: REVIEWER_SYSTEM_PROMPT },
+      { role: "user", content: userContent },
+    ],
+    responseFormat: { type: "json_schema", json_schema: TAILORED_MATERIALS_SCHEMA },
+  });
+
+  const content = result.choices[0]?.message?.content;
+  const raw = typeof content === "string" ? content : "";
+  if (!raw) throw new Error("The review pass returned an empty response");
+  const parsed = JSON.parse(raw) as RawTailoredMaterials;
+
+  return validateAgainstProfile(input.profile, parsed);
+}
+
+/**
+ * Draft, then review — the composed entry point real callers should use.
+ * A review-pass failure (network error, malformed output, anything) falls
+ * back to the validated first draft rather than failing the whole tailoring
+ * step: same "a best-effort quality improvement must never block a real
+ * application" treatment this codebase gives every other optional step
+ * (e.g. Phase 13's title suggestions, Phase 8b's shortlist-PDF fallback).
+ */
+export async function generateReviewedTailoredMaterials(input: {
+  profile: ProfileForTailoring;
+  job: { title: string; employer: string; description: string };
+  scoreRationale?: string;
+}): Promise<TailoredMaterials> {
+  const draft = await generateTailoredMaterials(input);
+  try {
+    return await reviewTailoredMaterials({ profile: input.profile, job: input.job, draft });
+  } catch (error) {
+    console.error("[documentTailoring] Review pass failed, using the unreviewed first draft", error);
+    return draft;
+  }
 }
 
 /**

@@ -1,8 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
-import { generateTailoredMaterials, buildTailoredResumePdf, buildCoverLetterPdf, selectFeaturedExperienceIndexes } from "./documentTailoring";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { generateTailoredMaterials, reviewTailoredMaterials, generateReviewedTailoredMaterials, buildTailoredResumePdf, buildCoverLetterPdf, selectFeaturedExperienceIndexes } from "./documentTailoring";
 
 const invokeLLM = vi.fn();
 vi.mock("./_core/llm", () => ({ invokeLLM: (...args: unknown[]) => invokeLLM(...args) }));
+
+beforeEach(() => invokeLLM.mockClear());
 
 const profile = {
   displayName: "Jane Doe",
@@ -53,6 +55,63 @@ describe("generateTailoredMaterials", () => {
     const materials = await generateTailoredMaterials({ profile, job });
     expect(materials.experienceBullets).toEqual([{ experienceIndex: 0, bullets: ["Real entry"] }]);
     expect(materials.skillsToHighlight).toEqual(["Go"]);
+  });
+});
+
+const draft = {
+  tailoredSummary: "A draft summary.",
+  experienceBullets: [{ experienceIndex: 0, bullets: ["Draft bullet"] }],
+  skillsToHighlight: ["Go"],
+  coverLetter: "Dear hiring manager, draft.",
+  gapsToMention: [],
+};
+
+describe("reviewTailoredMaterials", () => {
+  it("returns the reviewer's improved version, validated against the real profile", async () => {
+    mockLlmResponse({
+      tailoredSummary: "A tighter, improved summary.",
+      experienceBullets: [{ experienceIndex: 0, bullets: ["Improved bullet"] }],
+      skillsToHighlight: ["Go", "TypeScript"],
+      coverLetter: "Dear hiring manager, improved.",
+      gapsToMention: [],
+    });
+
+    const reviewed = await reviewTailoredMaterials({ profile, job, draft });
+    expect(reviewed.tailoredSummary).toBe("A tighter, improved summary.");
+    expect(reviewed.skillsToHighlight).toEqual(["Go", "TypeScript"]);
+  });
+
+  it("filters a hallucinated skill or invented experience index out of the reviewer's own output", async () => {
+    mockLlmResponse({
+      tailoredSummary: "Improved.",
+      experienceBullets: [{ experienceIndex: 42, bullets: ["Invented by the reviewer"] }],
+      skillsToHighlight: ["Go", "Quantum Computing"],
+      coverLetter: "Dear hiring manager.",
+      gapsToMention: [],
+    });
+
+    const reviewed = await reviewTailoredMaterials({ profile, job, draft });
+    expect(reviewed.experienceBullets).toEqual([]);
+    expect(reviewed.skillsToHighlight).toEqual(["Go"]);
+  });
+});
+
+describe("generateReviewedTailoredMaterials", () => {
+  it("returns the reviewed version when both calls succeed", async () => {
+    mockLlmResponse(draft);
+    mockLlmResponse({ ...draft, tailoredSummary: "Reviewed summary." });
+
+    const result = await generateReviewedTailoredMaterials({ profile, job });
+    expect(result.tailoredSummary).toBe("Reviewed summary.");
+    expect(invokeLLM).toHaveBeenCalledTimes(2);
+  });
+
+  it("falls back to the validated first draft if the review pass fails", async () => {
+    mockLlmResponse(draft);
+    invokeLLM.mockRejectedValueOnce(new Error("network error"));
+
+    const result = await generateReviewedTailoredMaterials({ profile, job });
+    expect(result.tailoredSummary).toBe("A draft summary.");
   });
 });
 

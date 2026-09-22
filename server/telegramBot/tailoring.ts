@@ -1,7 +1,8 @@
 import { eq, and } from "drizzle-orm";
 import { candidateProfiles, jobs, scorecards } from "../../drizzle/schema";
 import { getDb } from "../db";
-import { buildCoverLetterPdf, buildTailoredResumePdf, generateTailoredMaterials } from "../documentTailoring";
+import { buildCoverLetterPdf, buildTailoredResumePdf, generateReviewedTailoredMaterials } from "../documentTailoring";
+import { assessPdfAtsParseability } from "../atsCheck";
 import { sendDocumentBuffer, sendPlainMessage } from "../telegram";
 
 function slug(value: string): string {
@@ -28,7 +29,7 @@ export async function buildTailoredPackageForJob(userId: number, jobId: number) 
   const job = jobRows[0];
   if (!profile || !job) return null;
 
-  const materials = await generateTailoredMaterials({
+  const materials = await generateReviewedTailoredMaterials({
     profile,
     job: { title: job.title, employer: job.employer, description: job.description },
     scoreRationale: scorecardRows[0]?.rationale,
@@ -51,8 +52,23 @@ export async function sendTailoredMaterialsForJob(chatId: string, userId: number
   try {
     const pkg = await buildTailoredPackageForJob(userId, jobId);
     if (!pkg) return;
-    const { job, materials, resumePdf, coverLetterPdf } = pkg;
+    const { profile, job, materials, resumePdf, coverLetterPdf } = pkg;
     const filenameBase = slug(job.employer);
+
+    // Phase 11 (ROADMAP.md): catch a PDF that renders fine visually but
+    // extracts as garbage to a real ATS parser. Detection only — still send
+    // the document either way, since withholding it entirely would be worse
+    // for the user than one worth double-checking; a failure here is a real
+    // bug in buildTailoredResumePdf worth investigating in the logs.
+    try {
+      const atsCheck = await assessPdfAtsParseability(resumePdf, profile.displayName ?? "");
+      if (!atsCheck.ok) {
+        console.error(`[TelegramBot] ATS-parseability check failed for user ${userId}, job ${jobId}: ${atsCheck.reasons.join("; ")}`);
+      }
+    } catch (error) {
+      console.error("[TelegramBot] ATS-parseability check itself failed to run", error);
+    }
+
     await sendDocumentBuffer({ chatId, filename: `resume-${filenameBase}.pdf`, buffer: resumePdf, caption: `Tailored resume — ${job.title} at ${job.employer}` });
     await sendDocumentBuffer({ chatId, filename: `cover-letter-${filenameBase}.pdf`, buffer: coverLetterPdf, caption: `Cover letter — ${job.title} at ${job.employer}` });
     if (materials.gapsToMention.length) {

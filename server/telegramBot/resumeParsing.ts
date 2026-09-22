@@ -1,5 +1,6 @@
 import { invokeLLM } from "../_core/llm";
 import { downloadTelegramFile } from "../telegram";
+import { parsePdfWithRetry } from "../pdfParseWithRetry";
 import type { ParsedResumeProfile } from "./db";
 
 export type SupportedResumeMime = "application/pdf" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -10,8 +11,7 @@ export function isSupportedResumeMime(mimeType: string | undefined): mimeType is
 
 async function extractText(buffer: Buffer, mimeType: SupportedResumeMime): Promise<string> {
   if (mimeType === "application/pdf") {
-    const pdfParse = (await import("pdf-parse")).default;
-    const result = await pdfParse(buffer);
+    const result = await parsePdfWithRetry(buffer);
     return result.text;
   }
   const mammoth = await import("mammoth");

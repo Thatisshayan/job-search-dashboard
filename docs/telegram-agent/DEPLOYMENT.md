@@ -57,7 +57,9 @@ move there instead.
 | `VITE_APP_ID` | `job-search-dashboard-bot` | Placeholder, same reasoning as above |
 | `NODE_ENV` | `production` | |
 | `TELEGRAM_BOT_TOKEN` | (the real bot token) | Same bot used for local testing — its webhook now points at this deployment, not the local tunnel |
-| `OPENROUTER_API_KEY` | (the real key) | |
+| `NVIDIA_API_KEY` | (the real key) | Was `OPENROUTER_API_KEY` until Phase 19 (2026-09-13) — see `DECISIONS.md` D4's update. Calls Nvidia's own API directly, no OpenRouter involved |
+| `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` | (the real values) | Phase 4's job-discovery source; `ADZUNA_DEFAULT_COUNTRY` left at its `ca` default |
+| `APIFY_API_TOKEN` | (the real token) | Phase 16's Indeed-via-Apify discovery source |
 | `PORT` | *(unset — Railway injects it)* | The app already reads `process.env.PORT` |
 
 ## Telegram webhook

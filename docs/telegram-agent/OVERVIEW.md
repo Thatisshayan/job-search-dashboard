@@ -33,7 +33,7 @@ since a bot with nothing to search is just a chatbot.
 | Fixed construction-industry keyword scoring | Scoring driven by the user's actual parsed résumé and stated targets |
 | No tailored documents | Bot generates a tailored resume + cover letter per job (OpenRouter LLM) |
 | Telegram approval ends at "here's the link, go apply yourself" | **Unchanged on purpose** — see [DECISIONS.md](./DECISIONS.md) for why full autonomous submission was explicitly rejected for now |
-| AI calls go through Manus's Forge proxy | AI calls go through OpenRouter (`OPENROUTER_API_KEY`) — Phase 1, already done |
+| AI calls go through Manus's Forge proxy | AI calls go through Nvidia's own API directly (`NVIDIA_API_KEY`) — Phase 1 moved this off Manus via OpenRouter, Phase 19 (2026-09-13) then dropped OpenRouter itself, see [DECISIONS.md](./DECISIONS.md) D4 |
 | Single hardcoded owner | Schema is already multi-user-ready (every table has `userId`); we're just onboarding one user for now |
 
 ## Document map

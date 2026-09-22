@@ -24,25 +24,38 @@ export function isAdzunaConfigured() {
   return Boolean(ENV.adzunaAppId && ENV.adzunaAppKey);
 }
 
-/**
- * Only "ca"/"us"/"gb" etc. two-letter Adzuna country codes are supported, and
- * this product has no per-user country field yet (only a free-text city) —
- * every search runs against a single fixed country. Revisit once onboarding
- * asks for a country explicitly, or once users outside Canada show up.
- */
+/** Deployment-wide fallback when a user hasn't set their own country (searchSettings.country). */
 const DEFAULT_COUNTRY = process.env.ADZUNA_DEFAULT_COUNTRY || "ca";
+
+/**
+ * Format check only (two letters) — deliberately NOT a hardcoded enum of
+ * "supported" Adzuna country codes. Adzuna's own docs don't publish a single
+ * authoritative machine-readable list at a stable URL, and third-party
+ * sources disagree on the exact count (as few as ~12 vs. as many as ~18
+ * depending where you look) — hardcoding a guessed list risked being
+ * confidently wrong in either direction (silently rejecting a real country,
+ * or silently accepting a fake one). Adzuna's API itself is the actual
+ * source of truth: an unsupported code fails the request cleanly, which the
+ * existing per-title try/catch in jobSearch.ts already logs and continues
+ * past — same non-fatal treatment as any other Adzuna failure.
+ */
+export function isPlausibleCountryCode(value: string): boolean {
+  return /^[a-z]{2}$/i.test(value.trim());
+}
 
 export async function searchAdzunaJobs(input: {
   what: string;
   where: string;
   distanceKm: number;
   resultsPerPage?: number;
+  country?: string;
 }): Promise<AdzunaJob[]> {
   if (!isAdzunaConfigured()) {
     throw new Error("ADZUNA_APP_ID/ADZUNA_APP_KEY are not configured");
   }
 
-  const url = new URL(`https://api.adzuna.com/v1/api/jobs/${DEFAULT_COUNTRY}/search/1`);
+  const country = input.country && isPlausibleCountryCode(input.country) ? input.country.toLowerCase() : DEFAULT_COUNTRY;
+  const url = new URL(`https://api.adzuna.com/v1/api/jobs/${country}/search/1`);
   url.searchParams.set("app_id", ENV.adzunaAppId);
   url.searchParams.set("app_key", ENV.adzunaAppKey);
   url.searchParams.set("what", input.what);

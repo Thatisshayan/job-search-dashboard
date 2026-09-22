@@ -153,6 +153,17 @@ export async function setGeneralWorkEnabled(userId: number, enabled: boolean): P
 }
 
 /**
+ * Sets (or, with `null`, clears back to the deployment's ADZUNA_DEFAULT_COUNTRY
+ * fallback) a user's own two-letter Adzuna country code. See /country
+ * (telegramBot/country.ts) and jobSearch/adzuna.ts's isPlausibleCountryCode.
+ */
+export async function setUserCountry(userId: number, country: string | null): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(searchSettings).set({ country }).where(eq(searchSettings.userId, userId));
+}
+
+/**
  * importVerifiedListingBatch requires an existing, enabled sourceConfigs row
  * matching the batch's sourceName — auto-provision one for a bot user the
  * first time an automated search runs for them, rather than requiring a

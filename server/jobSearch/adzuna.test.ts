@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adzunaJobToVerifiedListing } from "./adzuna";
+import { adzunaJobToVerifiedListing, isPlausibleCountryCode } from "./adzuna";
 
 const baseJob = {
   id: "12345",
@@ -40,5 +40,21 @@ describe("adzunaJobToVerifiedListing", () => {
     const listing = adzunaJobToVerifiedListing({ ...baseJob, company: undefined, location: undefined });
     expect(listing?.employer).toBe("Employer not disclosed");
     expect(listing?.location).toBe("Location not disclosed");
+  });
+});
+
+describe("isPlausibleCountryCode", () => {
+  it("accepts a plain two-letter code, case-insensitively", () => {
+    expect(isPlausibleCountryCode("us")).toBe(true);
+    expect(isPlausibleCountryCode("GB")).toBe(true);
+    expect(isPlausibleCountryCode(" ca ")).toBe(true);
+  });
+
+  it("rejects anything that isn't exactly two letters", () => {
+    expect(isPlausibleCountryCode("usa")).toBe(false);
+    expect(isPlausibleCountryCode("u")).toBe(false);
+    expect(isPlausibleCountryCode("Toronto")).toBe(false);
+    expect(isPlausibleCountryCode("12")).toBe(false);
+    expect(isPlausibleCountryCode("")).toBe(false);
   });
 });

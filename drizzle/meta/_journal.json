@@ -57,6 +57,13 @@
       "when": 1789259908852,
       "tag": "0007_loving_obadiah_stane",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1790104088511,
+      "tag": "0008_soft_carlie_cooper",
+      "breakpoints": true
     }
   ]
 }

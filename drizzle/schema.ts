@@ -57,6 +57,12 @@ export const searchSettings = mysqlTable(
     track: mysqlEnum("track", ["career", "general"]).notNull().default("career"),
     targetTitles: json("targetTitles").$type<string[]>().notNull(),
     city: varchar("city", { length: 120 }).notNull().default("Toronto, Ontario"),
+    // Nullable: null means "use this deployment's ADZUNA_DEFAULT_COUNTRY env
+    // fallback" (see server/jobSearch/adzuna.ts). Two-letter Adzuna country
+    // code, e.g. "us", "gb" — set via /country, not asked during onboarding
+    // (most users never need it; adding a mandatory step would add friction
+    // for the common case). See ROADMAP.md's Phase 4 "still open" note.
+    country: varchar("country", { length: 2 }),
     radiusKm: int("radiusKm").notNull().default(75),
     employmentTypes: json("employmentTypes").$type<string[]>().notNull(),
     minimumScore: int("minimumScore").notNull().default(60),

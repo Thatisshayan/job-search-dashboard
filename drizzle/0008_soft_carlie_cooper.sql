@@ -1,0 +1,1 @@
+ALTER TABLE `search_settings` ADD `country` varchar(2);

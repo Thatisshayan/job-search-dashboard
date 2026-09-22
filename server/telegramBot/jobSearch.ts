@@ -54,7 +54,7 @@ export async function runJobSearchForUser(userId: number): Promise<JobSearchOutc
       for (const title of settings.targetTitles) {
         let results;
         try {
-          results = await searchAdzunaJobs({ what: title, where: settings.city, distanceKm: settings.radiusKm, resultsPerPage: 10 });
+          results = await searchAdzunaJobs({ what: title, where: settings.city, distanceKm: settings.radiusKm, resultsPerPage: 10, country: settings.country ?? undefined });
         } catch (error) {
           console.error(`[jobSearch] Adzuna search failed for title "${title}"`, error);
           continue;
@@ -241,7 +241,7 @@ export async function runGeneralWorkSearchForUser(userId: number): Promise<Gener
     for (const title of GENERAL_WORK_TITLES) {
       let results;
       try {
-        results = await searchAdzunaJobs({ what: title, where: settings.city, distanceKm: settings.radiusKm, resultsPerPage: 5 });
+        results = await searchAdzunaJobs({ what: title, where: settings.city, distanceKm: settings.radiusKm, resultsPerPage: 5, country: settings.country ?? undefined });
       } catch (error) {
         console.error(`[generalWorkSearch] Adzuna search failed for title "${title}"`, error);
         continue;

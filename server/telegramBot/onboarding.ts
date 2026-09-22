@@ -76,6 +76,30 @@ export function planTextStep(state: OnboardingState, text: string, context: Reco
   }
 
   if (state === "awaiting_target_titles") {
+    // Phase 13: if finishResumeIntake (handler.ts) generated suggestions from
+    // the parsed résumé, a plain "yes" accepts them instead of requiring the
+    // user to retype what the bot already proposed. Exact/whole-phrase
+    // matches only (not `.includes("y")`) — Phase 15 already hit that exact
+    // false-positive bug for single-letter shorthand elsewhere in this file.
+    const suggested = Array.isArray(context.suggestedTargetTitles) ? (context.suggestedTargetTitles as string[]) : [];
+    const acceptsSuggested =
+      suggested.length > 0 &&
+      (normalized === "yes" ||
+        normalized === "y" ||
+        normalized.includes("use these") ||
+        normalized.includes("use those") ||
+        normalized.includes("those work") ||
+        normalized.includes("sounds good") ||
+        normalized === "suggested");
+    if (acceptsSuggested) {
+      return {
+        ok: true,
+        nextState: "awaiting_location",
+        context: { ...context, targetTitles: suggested },
+        reply: "Got it. What city or region should I search near? (e.g. \"Toronto, Ontario\")",
+      };
+    }
+
     const titles = trimmed.split(",").map(title => title.trim()).filter(Boolean);
     if (titles.length === 0) {
       return { ok: false, reply: "I didn't catch any role titles there. List one or more, separated by commas (e.g. \"Software Engineer, Backend Developer\")." };

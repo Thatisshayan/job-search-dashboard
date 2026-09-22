@@ -49,6 +49,34 @@ describe("planTextStep", () => {
     expect(result.ok).toBe(false);
   });
 
+  it("accepts 'yes' to use suggested titles from context (Phase 13)", () => {
+    const result = planTextStep("awaiting_target_titles", "yes", {
+      track: "career",
+      suggestedTargetTitles: ["Construction Project Manager", "Site Superintendent"],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok result");
+    expect(result.nextState).toBe("awaiting_location");
+    expect(result.context.targetTitles).toEqual(["Construction Project Manager", "Site Superintendent"]);
+  });
+
+  it("still parses a typed comma list even when suggestions are present", () => {
+    const result = planTextStep("awaiting_target_titles", "Electrician", {
+      track: "career",
+      suggestedTargetTitles: ["Construction Project Manager"],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok result");
+    expect(result.context.targetTitles).toEqual(["Electrician"]);
+  });
+
+  it("treats 'yes' as a literal title when no suggestions were offered", () => {
+    const result = planTextStep("awaiting_target_titles", "yes", { track: "career" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok result");
+    expect(result.context.targetTitles).toEqual(["yes"]);
+  });
+
   it("collects a location and advances to awaiting_radius", () => {
     const result = planTextStep("awaiting_location", "Toronto, Ontario", { track: "career", targetTitles: ["Software Engineer"] });
     expect(result.ok).toBe(true);

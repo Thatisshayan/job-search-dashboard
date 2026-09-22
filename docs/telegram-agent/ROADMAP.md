@@ -1,8 +1,10 @@
 # Roadmap / Todo
 
 Scope locked in by [DECISIONS.md](./DECISIONS.md): Telegram-native interface,
-OpenRouter for AI, legitimate job-search APIs (not scraping), human final
-click retained (no unsupervised auto-submit), single user for now.
+Nvidia's own API for AI (D4, since Phase 19 — OpenRouter was the original
+choice, dropped 2026-09-13), legitimate job-search APIs (not scraping),
+human final click retained (no unsupervised auto-submit), single user for
+now.
 
 Update this file's checkboxes as work lands. If a phase's actual
 implementation diverges from what's written here, update the doc in the
@@ -147,7 +149,42 @@ in the logs, no other errors.
 
 **Still open:**
 - [ ] The "user forwards a link" fallback from `DECISIONS.md` D1 — deferred; Adzuna coverage is confirmed working, so this is lower priority now.
-- [ ] Only one fixed country per deployment (`ADZUNA_DEFAULT_COUNTRY`, default `ca`) — there's no per-user country field yet, so a user searching outside that country would get no results silently. Worth adding to onboarding if this becomes a real need.
+- [x] **Per-user country override, built 2026-09-22.** `ADZUNA_DEFAULT_COUNTRY`
+  (default `ca`) is now just the deployment-wide fallback — a user outside
+  that country no longer gets silent empty results. `search_settings.country`
+  (nullable varchar(2), migration `0008_soft_carlie_cooper.sql`) plus a new
+  `/country` command (`telegramBot/country.ts`: show current, set a code,
+  `/country reset` to go back to the default), not an onboarding step —
+  same "command, not mandatory friction" reasoning Phase 14b used for
+  `/generalwork`, since most users never need this. `searchAdzunaJobs()`
+  (`jobSearch/adzuna.ts`) gained an optional `country` param and a pure
+  `isPlausibleCountryCode()` format check.
+  - **Deliberately not a hardcoded "supported countries" allowlist.**
+    Adzuna's own docs don't publish one authoritative machine-readable list
+    at a stable URL (their interactive Swagger docs are JS-rendered, not
+    fetchable as static content), and independent third-party sources
+    disagree on the exact count (as few as ~12 vs. as many as ~18 depending
+    where you look) — hardcoding a guessed list risked confidently
+    rejecting a real country or accepting a fake one. Format-checked only
+    (two letters); an actually-unsupported code just comes back with no
+    results on the next search, same non-fatal treatment as any other
+    Adzuna failure, and `/country`'s confirmation message says so plainly.
+  - **Verified against a real local MySQL 8 container**, once Docker Desktop
+    was started: applied the full migration chain (`0000`-`0008`) cleanly,
+    confirmed `search_settings.country` is `varchar(2) NULL` as designed via
+    `DESCRIBE`, then ran the actual app code end-to-end against it —
+    `getOrCreateUserForChat` → `saveSearchSettingsFromOnboarding` (country
+    starts `null`) → `setUserCountry(id, "us")` (`"us"`) →
+    `setUserCountry(id, null)` (back to `null`, the `/country reset` path) —
+    all through the real Drizzle layer, not mocks. (Initially skipped this
+    because Docker's daemon wasn't running in this environment; corrected
+    once it was available rather than leaving the earlier "not verified"
+    note standing.)
+  - Tests: `isPlausibleCountryCode` unit tests (`adzuna.test.ts`) and
+    `country.test.ts` (mocked DB, same pattern as `generalWork.test.ts`).
+    `pnpm check`/`test`/`build` all clean (160 tests, up from 153).
+  - Not yet live-tested (no real `/country us` → search cycle run against a
+    real Telegram chat).
 
 ## Phase 5 — Score fetched listings automatically ✅ done (folded into Phase 4)
 
@@ -244,8 +281,16 @@ that was designed but not built (recruiter-style adaptive onboarding).
 **Not done, deliberately, per this pass's scope:**
 - [ ] Buttonizing target-titles/location — free-text entry doesn't reduce
   to a fixed button set the way radius does; not attempted.
-- [ ] A general Telegram bot command menu (`/status`, `/settings`, etc.) —
-  noted as a nice-to-have, not built this pass.
+- [x] **`/status` command, built 2026-09-22** (see the end of this file's
+  changelog for the session it landed in). `telegramBot/status.ts`: a
+  read-only summary of resume-on-file, track, target roles (career track
+  only), location/radius/country, daily-check schedule, general-work
+  toggle, and watched-company count — aggregates what was previously only
+  visible by running several separate commands (`/edit`, `/country`,
+  `/generalwork status`, `/watching`). Deliberately doesn't duplicate
+  `/watching`'s per-company list formatting, just points there for the
+  detail, so the two can't drift apart. Tests: `status.test.ts` (mocked DB,
+  same pattern as `country.test.ts`/`generalWork.test.ts`).
 
 ## Phase 10 — Structured-ATS auto-submission (Greenhouse pilot) 🚧 in progress
 
@@ -380,27 +425,96 @@ first confirm the dry-run/screenshot step works correctly (safe, repeatable,
 no real submission), and only do a real CONFIRM against an actual posting
 the user is genuinely willing to apply to.
 
-## Phase 11 — Document-quality improvements (noted, not built)
+## Phase 11 — Document-quality improvements 🚧 in progress
 
 Raised 2026-08-31 after researching `MadsLorentzen/ai-job-search` (39k-star
 Claude Code job-search workflow) for reusable ideas — see DECISIONS.md's
 open-questions section for the full comparison. Its architecture doesn't
 transfer (interactive CLI vs. our autonomous bot; Python/LaTeX vs. our
 Node/pdfkit; scrapes job portals, which conflicts with D1), but one specific
-technique is worth adopting:
+technique was worth adopting:
 
-- [ ] **ATS-parseability check on generated PDFs.** Their `/apply` extracts
-  the *compiled* PDF's text layer and verifies it reads sanely to an ATS
-  parser (contact info present as real text, correct reading order, no
-  garbled glyphs) — because PDF generation can silently produce output that
-  looks right visually but extracts as garbage. We already depend on
-  `pdf-parse` (used today for resume intake in `resumeParsing.ts`); running
-  our own `buildTailoredResumePdf()` output back through it before sending
-  would catch that failure mode for near-zero new dependency cost. Not
-  built yet — small, well-scoped, good candidate for a quick follow-up.
-- [ ] **Drafter-reviewer second pass** on tailored materials (a critique
-  step before finalizing) — bigger cost (2x LLM calls per job), plausible
-  quality lift, not started.
+- [x] **ATS-parseability check on generated PDFs, built 2026-09-22.**
+  `server/atsCheck.ts`'s `assessPdfAtsParseability()` runs a freshly
+  generated resume PDF back through the same `pdf-parse` extraction already
+  used for résumé intake (`resumeParsing.ts`), and `evaluateExtractedText()`
+  (pure, unit-tested) flags: too little extracted text, a high ratio of
+  non-printable/garbled characters, or the candidate's name not appearing as
+  real extractable text. Wired into `telegramBot/tailoring.ts`'s
+  `sendTailoredMaterialsForJob()` — detection only, not a blocking gate: a
+  failure is logged loudly (`console.error`, job/user context) rather than
+  withholding the document, since a missing résumé is worse for the user
+  than one worth double-checking in the logs.
+  - **Two real bugs found and fixed while building this**, not the
+    hypothetical failure mode the check was written for:
+    1. **`pdfkit` was three years of fixes behind (`^0.15.1` → `^0.20.2`).**
+       Investigating an early "bad XRef entry" failure led down a real
+       rabbit hole — see below — but upgrading was correct regardless and is
+       kept.
+    2. **`pdf-parse` has a reproducible cold-start quirk**, confirmed
+       directly (5/5 fresh-process runs): the *first* `pdf-parse` call in a
+       process can throw a bogus error (`Command token too long: 128`, etc.)
+       against a perfectly valid PDF, while an immediate retry on the exact
+       same bytes always succeeds. This isn't specific to the new ATS check —
+       it's the same library `resumeParsing.ts` already used for every PDF
+       résumé a user has ever uploaded, meaning the very first PDF upload
+       after a fresh deploy/restart could have silently failed with a
+       confusing "I couldn't process that resume" message. Fixed centrally:
+       `server/pdfParseWithRetry.ts`'s `parsePdfWithRetry()` (one retry, not
+       a general backoff policy — the evidence showed a second attempt is
+       always enough) is now used by both `resumeParsing.ts` and
+       `atsCheck.ts`, so they can't drift into two different fixes for the
+       same underlying flake.
+  - **Correction to an earlier claim in this session**: the initial read of
+    the "bad XRef entry" failure was that `buildTailoredResumePdf` produces
+    *structurally invalid* PDFs — i.e. that every tailored resume this bot
+    had ever sent was broken. That was wrong. Byte-for-byte comparison of
+    two runs' output showed the only differences were the expected
+    `/CreationDate` timestamp and random `/ID` trailer fields; isolating
+    `pdf-parse` calls from PDF generation entirely (same buffer, called
+    twice in one process) proved the failure was 100% attributable to
+    `pdf-parse`'s own cold-start behavior, not corrupt PDF bytes. Recorded
+    here per this file's own stated purpose — don't let a wrong intermediate
+    conclusion stand uncorrected.
+  - Tests: `atsCheck.test.ts` (pure heuristic unit tests, plus one
+    integration test against a real `buildTailoredResumePdf()` output) and
+    `pdfParseWithRetry.test.ts` (mocked, covers the retry-then-succeed and
+    both-attempts-fail paths). `pnpm check`/`test`/`build` all clean (153
+    tests, up from 133).
+- [x] **Drafter-reviewer second pass, built 2026-09-22.** `documentTailoring.ts`
+  gained `reviewTailoredMaterials()` (a second LLM call that critiques and
+  improves the first draft, same JSON schema, explicitly allowed to correct
+  a wrong claim the draft made) and `generateReviewedTailoredMaterials()`
+  (composes draft → review, the real entry point). Both `generateTailoredMaterials`
+  and `reviewTailoredMaterials` now share one `validateAgainstProfile()`
+  helper (factored out, previously inlined only in the draft path) — the
+  reviewer's own output is itself LLM output and needs the identical
+  hallucination guardrail the first draft always had.
+  - Wired into `telegramBot/tailoring.ts`'s `buildTailoredPackageForJob`,
+    the single shared entry point for both delivery paths (the manual-link
+    flow's PDF attachments, and Phase 10's Greenhouse auto-submit form-fill)
+    — confirmed via grep that it's the only real call site, so both paths
+    get the review pass automatically, not just one.
+  - **Doubles the LLM cost of tailoring a job** (one extra call per approved
+    application) — a bounded, proportional increase tied to real usage
+    (approvals), not a new unbounded cost surface, so this was judged safe
+    to build without asking first, unlike Phase 12's much larger
+    multiply-by-N-cities cost question below.
+  - A review-pass failure (network error, malformed output) falls back to
+    the validated first draft rather than failing the whole tailoring step
+    — same graceful-degradation treatment as every other optional step in
+    this codebase.
+  - **Live-verified against the real Nvidia API** (not just mocked tests)
+    before trusting this: a real draft+review call pair for a fabricated
+    Senior Backend Engineer profile/job returned clean, grounded JSON in
+    ~35s (including one automatic retry after a transient 503) — the
+    reviewer correctly preserved real facts, and flagged "distributed
+    systems experience" in `gapsToMention` rather than inventing it, since
+    the profile's evidence bullets didn't explicitly establish it.
+  - Tests: `documentTailoring.test.ts` gained cases for the reviewer
+    returning an improved version, the reviewer's own output being
+    filtered against the real profile exactly like the draft's, and the
+    fallback-to-draft behavior on review failure.
 - [x] **Tailored resume always including irrelevant experience — real bug,
   fixed 2026-08-31.** `buildTailoredResumePdf` rendered every
   `profile.experience` entry unconditionally and fell back to an entry's
@@ -425,16 +539,50 @@ change, but the user has to manually switch back and forth rather than
 getting both regions' results together). Not started — needs that choice
 made first.
 
-## Phase 13 — Suggest related target roles from the parsed résumé (noted, not built)
+## Phase 13 — Suggest related target roles from the parsed résumé ✅ built, not yet live-tested
 
 Raised by the user 2026-08-31: `targetTitles` today only ever comes from
 what the user literally types during onboarding (`planTextStep`) — the
 already-parsed `candidateProfiles.experience`/`skills` (Phase 2) isn't
-used to propose titles the user didn't think to type. Plausible shape: an
-LLM call over the parsed profile, offered as suggestions after résumé
-upload, added to `targetTitles` only on explicit confirmation (consistent
-with this project's require-confirmation pattern everywhere else). Not
-scoped in detail yet.
+used to propose titles the user didn't think to type. Built 2026-09-22:
+
+- [x] `server/telegramBot/titleSuggestions.ts`: `suggestTargetTitles()` calls
+  `invokeLLM` with a strict JSON-schema response (3–6 titles), grounded in
+  the candidate's real headline/summary/skills/experience — the system
+  prompt forbids inventing credentials/seniority the résumé doesn't
+  support, same guardrail philosophy as `documentTailoring.ts`. Pure
+  `dedupeTitles()` (case-insensitive dedup, cap at 6) is unit-tested
+  separately from the LLM call, same pure-vs-IO split as
+  `greenhouseBoard.ts`.
+- [x] Wired into `handler.ts`'s `finishResumeIntake()`: for the career track
+  only (general-work has a fixed title list, nothing to suggest), résumé
+  save is followed by a best-effort suggestion call
+  (`safeSuggestTargetTitles`, never throws — a failure here must never
+  block onboarding, same "graceful degradation" treatment as
+  `notifyOwner`/the public-profile fetch). On success, suggestions are
+  stored in `bot_conversations.context.suggestedTargetTitles` and the
+  "what roles are you targeting?" prompt lists them; on failure, the
+  original plain prompt is unchanged.
+- [x] `onboarding.ts`'s `planTextStep` (`awaiting_target_titles`): an exact
+  "yes" (or a small set of whole-phrase equivalents — "use these", "use
+  those", "sounds good") accepts the stored suggestions; anything else
+  still falls through to the original comma-split parsing unchanged, so
+  typing your own list always works exactly as before. Deliberately
+  matches on whole phrases, not `.includes("y")` — Phase 15 already hit
+  that exact false-positive bug for single-letter yes/no shorthand
+  elsewhere in this file.
+- [x] No schema/migration change — reuses the existing `awaiting_target_titles`
+  state and `context` JSON column, consistent with this project's repeated
+  "simplified from the original plan" pattern when a new field would only
+  duplicate information already representable.
+- [x] Tests: `titleSuggestions.test.ts` (pure `dedupeTitles` cases) and three
+  new `onboarding.test.ts` cases (accepts "yes" with suggestions present;
+  still parses a typed list when suggestions are present; treats "yes" as a
+  literal title when no suggestions were offered, preserving old behavior).
+  `pnpm check`/`test` clean.
+
+**Not yet live-tested** — no real `/start` → résumé upload → suggested-titles
+→ "yes" cycle has been run against a real Telegram chat yet.
 
 ## Phase 14 — External-profile import + parallel "immediate hiring" track ✅ built, not yet live-tested
 
